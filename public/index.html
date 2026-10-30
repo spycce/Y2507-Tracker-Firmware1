@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AeroTrack // Y2507 Real-Time Telematics Core</title>
+  <meta name="description" content="Proprietary Real-Time GPS Tracking Dashboard and Telemetry Engine for Y2507-MB-V1.2 Hardware">
+
+  <!-- Modern Typography from Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+
+  <!-- Custom Core Styling -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="cyber-dark">
+
+  <!-- Top Glassmorphism Navigation Bar -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="brand-badge">
+        <div class="pulse-core"></div>
+        <div class="brand-text">
+          <span class="brand-title">AERO<span class="text-cyan">TRACK</span></span>
+          <span class="brand-subtitle">Y2507 TELEMATICS CORE</span>
+        </div>
+      </div>
+
+      <div class="device-selector-wrapper">
+        <label for="deviceSelect" class="selector-label">TARGET UNIT:</label>
+        <select id="deviceSelect" class="cyber-select">
+          <option value="">Awaiting Device Connection...</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Center Mode Switcher -->
+    <div class="header-center">
+      <div class="mode-pill">
+        <button id="liveModeBtn" class="mode-btn active" title="Live Continuous GPS Stream">
+          <span class="dot live-pulse"></span> LIVE STREAM
+        </button>
+        <button id="historyModeBtn" class="mode-btn" title="Replay Past Recorded Routes">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          HISTORY REPLAY
+        </button>
+      </div>
+    </div>
+
+    <!-- Right Controls & Status Indicators -->
+    <div class="header-right">
+      <!-- Controls & Status Indicators -->
+      <div class="action-group">
+        <button id="logToggleBtn" class="cyber-btn btn-outline" title="Toggle Raw Binary Packet Console">
+          <span class="btn-icon">📟</span> LOGS
+        </button>
+      </div>
+
+      <!-- Server Status Badge -->
+      <div class="status-indicator" id="serverStatusBadge">
+        <span class="status-dot online"></span>
+        <div class="status-meta">
+          <span class="status-title">TCP :5023</span>
+          <span class="status-val" id="connectionState">CONNECTED</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Map Canvas -->
+  <main class="map-viewport">
+    <div id="map"></div>
+
+    <!-- Floating Top Telemetry HUD -->
+    <div class="telemetry-hud" id="telemetryHud">
+      <!-- Speedometer Gauge Card -->
+      <div class="hud-card speed-card">
+        <div class="speed-gauge-ring">
+          <svg viewBox="0 0 100 100" class="speed-svg">
+            <circle cx="50" cy="50" r="42" class="gauge-bg" />
+            <circle cx="50" cy="50" r="42" class="gauge-bar" id="speedGaugeArc" />
+          </svg>
+          <div class="speed-inner">
+            <span class="speed-value" id="hudSpeed">0</span>
+            <span class="speed-unit">KM/H</span>
+          </div>
+        </div>
+        <div class="hud-card-footer">
+          <span class="card-caption">CURRENT SPEED</span>
+          <span class="speed-state" id="speedState">STOPPED</span>
+        </div>
+      </div>
+
+      <!-- Vehicle State Card (Ignition & Battery) -->
+      <div class="hud-card state-card">
+        <div class="card-header-row">
+          <span class="card-label">VEHICLE TELEMETRY</span>
+          <span class="signal-bars" id="signalBars" title="GSM Signal (CSQ)">
+            <span class="bar b1 active"></span>
+            <span class="bar b2 active"></span>
+            <span class="bar b3 active"></span>
+            <span class="bar b4"></span>
+          </span>
+        </div>
+
+        <div class="metric-grid">
+          <div class="metric-item">
+            <span class="metric-icon">🔑</span>
+            <div class="metric-body">
+              <span class="metric-label">IGNITION (ACC)</span>
+              <span class="metric-value status-off" id="hudAcc">OFF</span>
+            </div>
+          </div>
+
+          <div class="metric-item">
+            <span class="metric-icon">🔋</span>
+            <div class="metric-body">
+              <span class="metric-label">BATTERY</span>
+              <span class="metric-value" id="hudBattery">-- %</span>
+            </div>
+          </div>
+
+          <div class="metric-item">
+            <span class="metric-icon">🛰️</span>
+            <div class="metric-body">
+              <span class="metric-label">SATELLITES</span>
+              <span class="metric-value text-cyan" id="hudSats">--</span>
+            </div>
+          </div>
+
+          <div class="metric-item">
+            <span class="metric-icon">🧭</span>
+            <div class="metric-body">
+              <span class="metric-label">HEADING</span>
+              <span class="metric-value" id="hudHeading">--°</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card-footer-coords">
+          <span class="coord-tag">COORDS:</span>
+          <span class="coord-val" id="hudCoords">--.------, --.------</span>
+        </div>
+      </div>
+
+      <!-- Trip Statistics Card -->
+      <div class="hud-card stats-card">
+        <div class="card-header-row">
+          <span class="card-label">TRIP METRICS</span>
+          <span class="badge-pill" id="activeTimeAgo">SYNCED</span>
+        </div>
+
+        <div class="trip-stats-list">
+          <div class="stat-row">
+            <span class="stat-name">Total Distance</span>
+            <span class="stat-data" id="statDistance">0.00 km</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-name">Top Speed</span>
+            <span class="stat-data" id="statMaxSpeed">0 km/h</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-name">Avg Speed</span>
+            <span class="stat-data" id="statAvgSpeed">0 km/h</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-name">Packet Counter</span>
+            <span class="stat-data text-emerald" id="statPackets">0</span>
+          </div>
+        </div>
+
+        <div class="hud-actions-row">
+          <button id="recenterBtn" class="hud-action-btn" title="Recenter Camera on Vehicle">
+            🎯 Recenter
+          </button>
+          <button id="clearTrailBtn" class="hud-action-btn" title="Clear Breadcrumb Trail">
+            🧹 Clear Trail
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- History Replay Control Bar (Visible in History Mode) -->
+    <div class="history-player-bar hidden" id="historyPlayerBar">
+      <div class="player-controls">
+        <button id="replayPlayBtn" class="player-btn">▶ PLAY</button>
+        <button id="replayPauseBtn" class="player-btn hidden">⏸ PAUSE</button>
+        <button id="replayResetBtn" class="player-btn">⏮ RESTART</button>
+        <div class="speed-multiplier">
+          <button class="mult-btn active" data-speed="1">1x</button>
+          <button class="mult-btn" data-speed="2">2x</button>
+          <button class="mult-btn" data-speed="4">4x</button>
+        </div>
+      </div>
+
+      <div class="player-timeline">
+        <span class="timeline-time" id="replayCurrentTime">--:--:--</span>
+        <input type="range" id="replayScrubber" min="0" max="100" value="0" class="cyber-slider">
+        <span class="timeline-time" id="replayTotalTime">--:--:--</span>
+      </div>
+
+      <div class="player-meta">
+        <span id="replayFrameCount">0 / 0 points</span>
+        <button id="exitHistoryBtn" class="cyber-btn btn-xs">EXIT REPLAY</button>
+      </div>
+    </div>
+
+    <!-- Bottom Diagnostic Raw Packet Terminal (Collapsible) -->
+    <div class="terminal-drawer" id="terminalDrawer">
+      <div class="terminal-header">
+        <div class="terminal-title">
+          <span class="term-icon">📟</span>
+          <span>GT06 PROTOCOL DIAGNOSTIC STREAM</span>
+          <span class="badge-mini" id="termPacketCount">0 PACKETS</span>
+        </div>
+        <div class="terminal-actions">
+          <button id="termClearBtn" class="term-action-btn">Clear</button>
+          <button id="termCloseBtn" class="term-action-btn">✕</button>
+        </div>
+      </div>
+      <div class="terminal-body" id="terminalBody">
+        <div class="terminal-line system">
+          <span class="t-time">[00:00:00]</span>
+          <span class="t-tag">SYSTEM</span>
+          <span class="t-msg">AeroTrack GT06 Ingestion Engine initialized. Listening on TCP 0.0.0.0:5023...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Emergency SOS Alert Notification Banner -->
+    <div class="sos-alert-modal hidden" id="sosAlertModal">
+      <div class="sos-card">
+        <div class="sos-icon-flash">🚨</div>
+        <div class="sos-content">
+          <div class="sos-heading">EMERGENCY SOS ALERT RECEIVED</div>
+          <div class="sos-details" id="sosDetails">Device IMEI triggered external panic button!</div>
+          <div class="sos-coords" id="sosCoords">Lat: 0.000000, Lng: 0.000000</div>
+        </div>
+        <button id="sosDismissBtn" class="cyber-btn btn-danger">ACKNOWLEDGE</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <!-- Application Core Scripts -->
+  <script src="js/app.js"></script>
+</body>
+</html>
