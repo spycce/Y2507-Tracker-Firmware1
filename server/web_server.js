@@ -5,6 +5,7 @@ const path = require('node:path');
 const url = require('node:url');
 const { WebSocketServer } = require('ws');
 const db = require('./db');
+let sosPhone = '919699988638';
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=UTF-8',
@@ -56,7 +57,8 @@ class TelemetryWebServer {
             devices,
             latestLocations: initialLocations,
             alarms,
-            stats: this.tcpServer?.stats || {}
+            stats: this.tcpServer?.stats || {},
+            trackerStatus: this.tcpServer?.getTrackerStatus() || { connected: false }
           }
         }));
 
@@ -131,6 +133,39 @@ class TelemetryWebServer {
       return;
     }
 
+    // Heartbeat & Tracker Connectivity Status Endpoint
+    if (pathname === '/api/heartbeat' || pathname === '/api/tracker/status') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      const status = this.tcpServer?.getTrackerStatus() || { connected: false, error: 'TCP server not linked' };
+      res.end(JSON.stringify(status));
+      return;
+    }
+
+    // Real-Time Current Location Refresh Endpoint
+    if (pathname === '/api/tracker/refresh-location' || (pathname.startsWith('/api/device/') && pathname.endsWith('/refresh'))) {
+      let targetImei = '860465040325932';
+      if (pathname.startsWith('/api/device/')) {
+        targetImei = pathname.split('/')[3];
+      }
+      const result = this.tcpServer?.requestLocationRefresh(targetImei) || { success: false, error: 'TCP server not linked' };
+
+      // Broadcast refreshed fix to all connected dashboards
+      if (result.latestLocation) {
+        this.broadcast({
+          type: 'LIVE_LOCATION',
+          data: {
+            imei: targetImei,
+            location: result.latestLocation,
+            isRefreshed: true
+          }
+        });
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+      return;
+    }
+
     // REST API Routes
     if (pathname === '/api/devices') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -145,6 +180,80 @@ class TelemetryWebServer {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(trail));
       return;
+    }
+
+    if (pathname.startsWith('/api/device/') && pathname.endsWith('/sos') && req.method === 'POST') {
+      const imei = pathname.split('/')[3];
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', () => {
+        try {
+          const data = JSON.parse(body);
+          const phone = (data.phone || '').trim().replace(/[^0-9]/g, '');
+          if (!phone) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Phone number is required' }));
+            return;
+          }
+          // Build GT06 SOS configuration command: SOS,A,<phone>#
+          const commandStr = `SOS,A,${phone}#`;
+          const result = this.tcpServer?.sendCommand(imei, commandStr);
+          res.writeHead(result?.success ? 200 : 500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(result || { error: 'TCP server not linked' }));
+        } catch (e) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid JSON payload' }));
+        }
+      });
+      return;
+    }
+
+    if (pathname.startsWith('/api/device/') && pathname.endsWith('/command') && req.method === 'POST') {
+      const imei = pathname.split('/')[3];
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', () => {
+        try {
+          const data = JSON.parse(body);
+          const cmd = (data.command || '').trim();
+          if (!cmd) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Command string is required' }));
+            return;
+          }
+          const result = this.tcpServer?.sendCommand(imei, cmd);
+          res.writeHead(result?.success ? 200 : 500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(result || { error: 'TCP server not linked' }));
+        } catch (e) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid JSON payload' }));
+        }
+      });
+      return;
+    }
+
+    if (pathname === '/api/sos/config') {
+      if (req.method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ sosPhone }));
+        return;
+      }
+      if (req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body);
+            if (data.sosPhone) sosPhone = data.sosPhone.replace(/[^0-9]/g, '');
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true, sosPhone }));
+          } catch (e) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid JSON' }));
+          }
+        });
+        return;
+      }
     }
 
     if (pathname === '/api/stats') {

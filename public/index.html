@@ -15,7 +15,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
 
   <!-- Custom Core Styling -->
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=3.0.0">
 </head>
 <body class="cyber-dark">
 
@@ -28,13 +28,6 @@
           <span class="brand-title">AERO<span class="text-cyan">TRACK</span></span>
           <span class="brand-subtitle">Y2507 TELEMATICS CORE</span>
         </div>
-      </div>
-
-      <div class="device-selector-wrapper">
-        <label for="deviceSelect" class="selector-label">TARGET UNIT:</label>
-        <select id="deviceSelect" class="cyber-select">
-          <option value="">Awaiting Device Connection...</option>
-        </select>
       </div>
     </div>
 
@@ -53,27 +46,124 @@
 
     <!-- Right Controls & Status Indicators -->
     <div class="header-right">
-      <!-- Controls & Status Indicators -->
-      <div class="action-group">
-        <button id="logToggleBtn" class="cyber-btn btn-outline" title="Toggle Raw Binary Packet Console">
-          <span class="btn-icon">📟</span> LOGS
-        </button>
-      </div>
+      <!-- Real-time Location Refresh Button -->
+      <button id="refreshLocationBtn" class="cyber-btn btn-refresh-loc" title="Get / Refresh Live GPS Location from Tracker">
+        <span class="refresh-spinner" id="refreshSpinner">🔄</span>
+        <span class="btn-text" id="refreshBtnText">REFRESH GPS</span>
+      </button>
 
-      <!-- Server Status Badge -->
-      <div class="status-indicator" id="serverStatusBadge">
-        <span class="status-dot online"></span>
+      <!-- Consolidated Settings & Controls Menu Button -->
+      <button id="settingsToggleBtn" class="cyber-btn btn-settings" title="Open Settings & Telematics Controls">
+        <span class="btn-icon">⚙️</span>
+        <span class="btn-text">SETTINGS</span>
+        <span class="settings-active-pill" id="settingsActiveLayerTag">SATELLITE</span>
+        <svg class="settings-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+
+      <!-- Tracker Connection & Heartbeat Status Badge -->
+      <div class="status-indicator offline" id="serverStatusBadge" title="Click to view Tracker Connection & Heartbeat details" role="button" tabindex="0">
+        <span class="status-dot offline" id="trackerStatusDot"></span>
         <div class="status-meta">
-          <span class="status-title">TCP :5023</span>
-          <span class="status-val" id="connectionState">CONNECTED</span>
+          <span class="status-title" id="trackerStatusTitle">TRACKER :5023</span>
+          <span class="status-val" id="connectionState">WAITING...</span>
+          <span class="status-sub" id="trackerLastSeenSub">Checking...</span>
         </div>
       </div>
     </div>
   </header>
 
+  <!-- Consolidated Settings & Control Center Dropdown Section -->
+  <div class="settings-dropdown hidden" id="settingsDropdown">
+    <div class="settings-dropdown-header">
+      <div class="settings-dropdown-title">
+        <span class="settings-header-icon">⚙️</span>
+        <div class="settings-title-group">
+          <span class="settings-main-title">PLATFORM SETTINGS</span>
+          <span class="settings-sub-title">Map Views, Emergency SOS & Diagnostics</span>
+        </div>
+      </div>
+      <button class="settings-close-btn" id="settingsCloseBtn" title="Close Settings">&times;</button>
+    </div>
+
+    <div class="settings-dropdown-body">
+      <!-- 1. MAP VIEW & LAYERS -->
+      <div class="settings-section">
+        <div class="settings-section-head">
+          <span class="section-head-title">🗺️ MAP LAYERS & STYLE</span>
+          <span class="section-head-tag">HD TILES</span>
+        </div>
+        <div class="settings-layer-grid" id="mapLayerSwitcher">
+          <button class="layer-pill-btn active" data-layer="google-hybrid" title="Google Satellite + Road Labels">
+            <span class="layer-btn-icon">🛰️</span>
+            <span class="layer-btn-name">SATELLITE</span>
+          </button>
+          <button class="layer-pill-btn" data-layer="google-streets" title="Google Standard Roads">
+            <span class="layer-btn-icon">🗺️</span>
+            <span class="layer-btn-name">STREETS</span>
+          </button>
+          <button class="layer-pill-btn" data-layer="google-terrain" title="Google Topographic Terrain">
+            <span class="layer-btn-icon">⛰️</span>
+            <span class="layer-btn-name">TERRAIN</span>
+          </button>
+          <button class="layer-pill-btn" data-layer="dark-cyber" title="Cyber Dark Telematics">
+            <span class="layer-btn-icon">🌙</span>
+            <span class="layer-btn-name">DARK</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 2. EMERGENCY SOS COMMANDS -->
+      <div class="settings-section">
+        <div class="settings-section-head">
+          <span class="section-head-title">🚨 EMERGENCY & SOS COMMANDS</span>
+        </div>
+        <div class="settings-actions-list">
+
+          <!-- Trigger Emergency Panic Alarm -->
+          <button id="quickTriggerSosBtn" class="settings-action-row btn-danger-row" title="Trigger Emergency SOS Panic Alarm">
+            <div class="action-icon-box danger-box">🚨</div>
+            <div class="action-text-box">
+              <span class="action-row-title">TRIGGER SOS</span>
+              <span class="action-row-desc">Simulate panic alarm event on dashboard</span>
+            </div>
+            <span class="action-badge danger-badge">PANIC</span>
+          </button>
+
+          <!-- Program SOS Numbers -->
+          <button id="sosConfigBtn" class="settings-action-row btn-neutral-row" title="Program SOS Emergency Contact Numbers">
+            <div class="action-icon-box neutral-box">📞</div>
+            <div class="action-text-box">
+              <span class="action-row-title">SOS SETUP</span>
+              <span class="action-row-desc">Configure emergency phone number & SIM</span>
+            </div>
+            <span class="action-chevron">&rarr;</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 3. DIAGNOSTICS & SYSTEM -->
+      <div class="settings-section">
+        <div class="settings-section-head">
+          <span class="section-head-title">📟 DIAGNOSTICS & SYSTEM</span>
+        </div>
+        <div class="settings-actions-list">
+          <button id="logToggleBtn" class="settings-action-row btn-neutral-row" title="Toggle Raw Binary Packet Console">
+            <div class="action-icon-box neutral-box">📟</div>
+            <div class="action-text-box">
+              <span class="action-row-title">PACKET DIAGNOSTIC LOGS</span>
+              <span class="action-row-desc">Open raw GT06 hex & socket stream drawer</span>
+            </div>
+            <span class="action-badge neutral-badge">CONSOLE</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Main Map Canvas -->
   <main class="map-viewport">
     <div id="map"></div>
+
 
     <!-- Floating Top Telemetry HUD -->
     <div class="telemetry-hud" id="telemetryHud">
@@ -142,8 +232,16 @@
         </div>
 
         <div class="card-footer-coords">
-          <span class="coord-tag">COORDS:</span>
-          <span class="coord-val" id="hudCoords">--.------, --.------</span>
+          <div class="coords-body">
+            <span class="coord-tag">COORDS:</span>
+            <span class="coord-val" id="hudCoords">--.------, --.------</span>
+          </div>
+          <a id="gmapsNavBtn" href="https://maps.google.com" target="_blank" rel="noopener noreferrer" class="gmaps-shortcut-btn" title="Open live position in Google Maps">
+            <svg class="gmaps-pin-svg" viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 1 0 5z"/>
+            </svg>
+            Google Maps
+          </a>
         </div>
       </div>
 
@@ -174,6 +272,9 @@
         </div>
 
         <div class="hud-actions-row">
+          <button id="hudRefreshBtn" class="hud-action-btn hud-btn-refresh" title="Query & Refresh Instant GPS Fix">
+            🔄 Refresh GPS
+          </button>
           <button id="recenterBtn" class="hud-action-btn" title="Recenter Camera on Vehicle">
             🎯 Recenter
           </button>
@@ -240,14 +341,108 @@
           <div class="sos-details" id="sosDetails">Device IMEI triggered external panic button!</div>
           <div class="sos-coords" id="sosCoords">Lat: 0.000000, Lng: 0.000000</div>
         </div>
-        <button id="sosDismissBtn" class="cyber-btn btn-danger">ACKNOWLEDGE</button>
+        <div style="display: flex; justify-content: flex-end;">
+          <button id="sosDismissBtn" class="cyber-btn btn-danger">ACKNOWLEDGE</button>
+        </div>
       </div>
     </div>
+
+    <!-- SOS Phone Number Configuration Modal -->
+    <div class="custom-modal-overlay hidden" id="sosConfigModal">
+      <div class="custom-modal-card">
+        <div class="modal-header">
+          <div class="modal-title">📞 Program SOS Emergency Number</div>
+          <button class="modal-close-btn" id="sosModalCloseBtn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-desc">
+            When the external panic button or SOS wires are triggered, the tracker immediately sends emergency alerts and auto-dials this phone number.
+          </p>
+          <div class="form-group">
+            <label for="sosPhoneInput">Emergency Phone Number (with Country Code):</label>
+            <input type="tel" id="sosPhoneInput" placeholder="e.g. 919699988638" value="919699988638" class="cyber-input" />
+            <small class="field-help">Include country code without '+' (e.g., 919699988638 for India)</small>
+          </div>
+          <div class="sms-guide-box" style="margin-top: 14px;">
+            <div class="guide-title">📱 Alternatively, send this SMS to the tracker's SIM:</div>
+            <code id="smsCommandPreview">SOS,A,919699988638#</code>
+          </div>
+          <div id="sosConfigStatus" class="config-status-msg hidden"></div>
+        </div>
+        <div class="modal-footer" style="display: flex; justify-content: flex-end;">
+          <button id="sosSaveBtn" class="cyber-btn btn-primary">SAVE & CONFIGURE OVER TCP (0x80)</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tracker Heartbeat & Diagnostics Modal -->
+    <div class="custom-modal-overlay hidden" id="heartbeatModal">
+      <div class="custom-modal-card">
+        <div class="modal-header">
+          <div class="modal-title">💓 Tracker Connection & Heartbeat</div>
+          <button class="modal-close-btn" id="heartbeatModalCloseBtn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="heartbeat-status-card" id="heartbeatCardStatus">
+            <div class="hb-status-header">
+              <span class="hb-indicator-dot offline" id="hbModalDot"></span>
+              <div class="hb-indicator-meta">
+                <span class="hb-title" id="hbModalTitle">TRACKER STATUS</span>
+                <span class="hb-state" id="hbModalState">DISCONNECTED</span>
+              </div>
+              <button id="hbCheckNowBtn" class="cyber-btn btn-xs" title="Ping Heartbeat API">Check Now</button>
+            </div>
+            
+            <div class="hb-grid">
+              <div class="hb-item">
+                <span class="hb-label">TCP PORT</span>
+                <span class="hb-val text-cyan">5023 (LISTENING)</span>
+              </div>
+              <div class="hb-item">
+                <span class="hb-label">TRACKER IMEI</span>
+                <span class="hb-val" id="hbModalImei">860465040325932</span>
+              </div>
+              <div class="hb-item">
+                <span class="hb-label">SOCKET REMOTE</span>
+                <span class="hb-val" id="hbModalRemote">None (Waiting)</span>
+              </div>
+              <div class="hb-item">
+                <span class="hb-label">LAST PACKET / SEEN</span>
+                <span class="hb-val" id="hbModalLastSeen">Never</span>
+              </div>
+              <div class="hb-item">
+                <span class="hb-label">LAST HEARTBEAT</span>
+                <span class="hb-val" id="hbModalLastHb">Never</span>
+              </div>
+              <div class="hb-item">
+                <span class="hb-label">BATTERY / POWER</span>
+                <span class="hb-val" id="hbModalBatt">--</span>
+              </div>
+              <div class="hb-item">
+                <span class="hb-label">IGNITION (ACC)</span>
+                <span class="hb-val" id="hbModalAcc">--</span>
+              </div>
+              <div class="hb-item">
+                <span class="hb-label">TOTAL PACKETS</span>
+                <span class="hb-val text-emerald" id="hbModalPackets">0</span>
+              </div>
+            </div>
+          </div>
+          <p class="modal-desc" style="margin-top: 12px; font-size: 0.76rem; color: #94a3b8;">
+            Point your Y2507 GPS tracker to this machine's IP (or Cloudflare domain) on TCP port <strong>5023</strong>. Once connected, packets appear in real-time.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Real-time Quick Toast Notification Banner -->
+    <div class="app-toast-container" id="appToastContainer"></div>
+
   </main>
 
   <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <!-- Application Core Scripts -->
-  <script src="js/app.js"></script>
+  <script src="js/app.js?v=3.0.0"></script>
 </body>
 </html>

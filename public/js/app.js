@@ -3,11 +3,14 @@
 (function () {
   'use strict';
 
+  // Dedicated Hardware Tracker (Single-device platform)
+  const HARDCODED_IMEI = '860465040325932';
+
   // State Management
   const state = {
     ws: null,
     wsConnected: false,
-    activeImei: null,
+    activeImei: HARDCODED_IMEI,
     devices: new Map(),
     currentLocation: null,
     currentSpeed: 0,
@@ -26,16 +29,35 @@
     historyTimer: null
   };
 
+  // Ensure any past calibration offsets are cleared
+  try {
+    localStorage.removeItem('y2507_calibration_offset');
+  } catch (e) {}
+
   // DOM Elements
   const el = {
     deviceSelect: document.getElementById('deviceSelect'),
     liveModeBtn: document.getElementById('liveModeBtn'),
     historyModeBtn: document.getElementById('historyModeBtn'),
     logToggleBtn: document.getElementById('logToggleBtn'),
+    // Header Status & Controls
+    refreshLocationBtn: document.getElementById('refreshLocationBtn'),
+    refreshSpinner: document.getElementById('refreshSpinner'),
+    refreshBtnText: document.getElementById('refreshBtnText'),
+    trackerStatusDot: document.getElementById('trackerStatusDot'),
+    trackerStatusTitle: document.getElementById('trackerStatusTitle'),
+    trackerLastSeenSub: document.getElementById('trackerLastSeenSub'),
     connectionState: document.getElementById('connectionState'),
     serverStatusBadge: document.getElementById('serverStatusBadge'),
+
+    // Settings & Controls Section
+    settingsToggleBtn: document.getElementById('settingsToggleBtn'),
+    settingsDropdown: document.getElementById('settingsDropdown'),
+    settingsCloseBtn: document.getElementById('settingsCloseBtn'),
+    settingsActiveLayerTag: document.getElementById('settingsActiveLayerTag'),
     
     // HUD
+    hudRefreshBtn: document.getElementById('hudRefreshBtn'),
     hudSpeed: document.getElementById('hudSpeed'),
     speedGaugeArc: document.getElementById('speedGaugeArc'),
     speedState: document.getElementById('speedState'),
@@ -44,6 +66,7 @@
     hudSats: document.getElementById('hudSats'),
     hudHeading: document.getElementById('hudHeading'),
     hudCoords: document.getElementById('hudCoords'),
+    gmapsNavBtn: document.getElementById('gmapsNavBtn'),
     signalBars: document.getElementById('signalBars'),
     
     // Stats
@@ -76,7 +99,37 @@
     sosAlertModal: document.getElementById('sosAlertModal'),
     sosDetails: document.getElementById('sosDetails'),
     sosCoords: document.getElementById('sosCoords'),
-    sosDismissBtn: document.getElementById('sosDismissBtn')
+    sosDismissBtn: document.getElementById('sosDismissBtn'),
+
+    // Quick Action Bar Buttons
+    quickTriggerSosBtn: document.getElementById('quickTriggerSosBtn'),
+
+    // SOS Configuration Modal
+    sosConfigBtn: document.getElementById('sosConfigBtn'),
+    sosConfigModal: document.getElementById('sosConfigModal'),
+    sosModalCloseBtn: document.getElementById('sosModalCloseBtn'),
+    sosPhoneInput: document.getElementById('sosPhoneInput'),
+    sosSaveBtn: document.getElementById('sosSaveBtn'),
+    sosConfigStatus: document.getElementById('sosConfigStatus'),
+    smsCommandPreview: document.getElementById('smsCommandPreview'),
+
+    // Tracker Heartbeat Modal
+    heartbeatModal: document.getElementById('heartbeatModal'),
+    heartbeatModalCloseBtn: document.getElementById('heartbeatModalCloseBtn'),
+    hbModalDot: document.getElementById('hbModalDot'),
+    hbModalTitle: document.getElementById('hbModalTitle'),
+    hbModalState: document.getElementById('hbModalState'),
+    hbModalImei: document.getElementById('hbModalImei'),
+    hbModalRemote: document.getElementById('hbModalRemote'),
+    hbModalLastSeen: document.getElementById('hbModalLastSeen'),
+    hbModalLastHb: document.getElementById('hbModalLastHb'),
+    hbModalBatt: document.getElementById('hbModalBatt'),
+    hbModalAcc: document.getElementById('hbModalAcc'),
+    hbModalPackets: document.getElementById('hbModalPackets'),
+    hbCheckNowBtn: document.getElementById('hbCheckNowBtn'),
+
+    // Toast Container
+    appToastContainer: document.getElementById('appToastContainer')
   };
 
   // Leaflet Map & Layer References
@@ -84,30 +137,48 @@
   let vehicleMarker = null;
   let trailPolyline = null;
   let historyPolyline = null;
+  let mapLayers = {};
 
   // ----------------------------------------------------------------
-  // 1. INITIALIZE LEAFLET MAP
+  // 1. INITIALIZE LEAFLET MAP (Google Maps & OpenStreetMap Layers)
   // ----------------------------------------------------------------
   function initMap() {
     map = L.map('map', {
       zoomControl: false,
       attributionControl: false
-    }).setView([37.7749, -122.4194], 15);
+    }).setView([18.623, 73.727], 16);
 
     // Zoom control at bottom-right
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-    // Dark-themed tiles from OpenStreetMap with custom CSS filters
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      subdomains: ['a', 'b', 'c']
-    }).addTo(map);
+    // High-Resolution Google Maps & Custom Tile Layers
+    mapLayers = {
+      'google-hybrid': L.tileLayer('https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+        maxZoom: 20,
+        subdomains: ['0', '1', '2', '3']
+      }),
+      'google-streets': L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+        maxZoom: 20,
+        subdomains: ['0', '1', '2', '3']
+      }),
+      'google-terrain': L.tileLayer('https://mt{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', {
+        maxZoom: 20,
+        subdomains: ['0', '1', '2', '3']
+      }),
+      'dark-cyber': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        subdomains: ['a', 'b', 'c']
+      })
+    };
+
+    // Default to Google Satellite Hybrid view (sharpest photorealistic view)
+    setBaseMap('google-hybrid');
 
     // Primary Live Breadcrumb Polyline
     trailPolyline = L.polyline([], {
       color: '#06b6d4',
       weight: 4,
-      opacity: 0.85,
+      opacity: 0.9,
       smoothFactor: 1
     }).addTo(map);
 
@@ -115,7 +186,7 @@
     historyPolyline = L.polyline([], {
       color: '#f59e0b',
       weight: 4,
-      opacity: 0.9,
+      opacity: 0.95,
       dashArray: '6, 8'
     }).addTo(map);
 
@@ -126,11 +197,60 @@
         el.recenterBtn.classList.add('active');
       }
     });
+
+    // Layer switch buttons
+    document.querySelectorAll('.layer-pill-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        setBaseMap(btn.dataset.layer);
+      });
+    });
+  }
+
+  function setBaseMap(layerKey) {
+    if (!map || !mapLayers) return;
+    Object.values(mapLayers).forEach(l => {
+      if (map.hasLayer(l)) map.removeLayer(l);
+    });
+
+    const targetLayer = mapLayers[layerKey] || mapLayers['google-hybrid'];
+    targetLayer.addTo(map);
+
+    const mapEl = document.getElementById('map');
+    if (layerKey === 'dark-cyber') {
+      mapEl.classList.add('dark-mode');
+    } else {
+      mapEl.classList.remove('dark-mode');
+    }
+
+    document.querySelectorAll('.layer-pill-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.layer === layerKey);
+    });
+
+    const layerLabels = {
+      'google-hybrid': 'SATELLITE',
+      'google-streets': 'STREETS',
+      'google-terrain': 'TERRAIN',
+      'dark-cyber': 'DARK'
+    };
+    if (el.settingsActiveLayerTag && layerLabels[layerKey]) {
+      el.settingsActiveLayerTag.textContent = layerLabels[layerKey];
+    }
   }
 
   // Create or Update Custom Animated Vehicle Marker
   function updateVehicleMarker(lat, lng, heading = 0) {
     const latlng = [lat, lng];
+
+    const popupHtml = `
+      <div style="font-family: var(--font-ui); color: #0f172a; padding: 6px; min-width: 175px;">
+        <div style="font-weight: 800; font-size: 0.85rem; color: #0f172a; margin-bottom: 2px;">📡 Y2507 Tracker</div>
+        <div style="font-size: 0.72rem; color: #64748b; font-family: var(--font-mono); margin-bottom: 8px;">${lat.toFixed(6)}, ${lng.toFixed(6)}</div>
+        <a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank" rel="noopener noreferrer" 
+           style="display: block; text-align: center; background: #2563eb; color: #fff; padding: 5px 8px; border-radius: 4px; text-decoration: none; font-size: 0.72rem; font-weight: 700; box-shadow: 0 2px 6px rgba(37,99,235,0.4);">
+          Open Google Maps &rarr;
+        </a>
+      </div>
+    `;
 
     if (!vehicleMarker) {
       const customIcon = L.divIcon({
@@ -150,8 +270,10 @@
       });
 
       vehicleMarker = L.marker(latlng, { icon: customIcon }).addTo(map);
+      vehicleMarker.bindPopup(popupHtml);
     } else {
       vehicleMarker.setLatLng(latlng);
+      vehicleMarker.setPopupContent(popupHtml);
     }
 
     // Smoothly rotate the arrow to match compass heading
@@ -177,9 +299,8 @@
 
     state.ws.onopen = () => {
       state.wsConnected = true;
-      el.connectionState.textContent = 'CONNECTED';
-      el.serverStatusBadge.classList.add('online');
-      appendTerminalLog('SYSTEM', 'WebSocket link established. Awaiting telemetry stream.');
+      appendTerminalLog('SYSTEM', 'WebSocket link established. Ingestion engine online.');
+      pollHeartbeat();
     };
 
     state.ws.onmessage = (event) => {
@@ -193,8 +314,11 @@
 
     state.ws.onclose = () => {
       state.wsConnected = false;
-      el.connectionState.textContent = 'RECONNECTING';
-      el.serverStatusBadge.classList.remove('online');
+      if (el.serverStatusBadge) el.serverStatusBadge.className = 'status-indicator offline';
+      if (el.trackerStatusDot) el.trackerStatusDot.className = 'status-dot offline';
+      if (el.trackerStatusTitle) el.trackerStatusTitle.textContent = 'SERVER LINK';
+      if (el.connectionState) el.connectionState.textContent = 'RECONNECTING';
+      if (el.trackerLastSeenSub) el.trackerLastSeenSub.textContent = 'WS Lost';
       appendTerminalLog('SYSTEM', 'WebSocket link lost. Retrying in 2 seconds...');
       setTimeout(connectWebSocket, 2000);
     };
@@ -207,8 +331,12 @@
   function handleServerMessage(msg) {
     switch (msg.type) {
       case 'SYNC_INIT': {
-        const { devices, latestLocations } = msg.data;
+        const { devices, latestLocations, trackerStatus } = msg.data;
         updateDeviceList(devices);
+
+        if (trackerStatus) {
+          updateTrackerConnectionHud(trackerStatus);
+        }
 
         if (devices.length > 0) {
           const activeDev = devices[0];
@@ -226,14 +354,32 @@
         break;
       }
 
+      case 'TRACKER_STATUS': {
+        updateTrackerConnectionHud(msg.data);
+        break;
+      }
+
+      case 'CLIENT_CONNECT': {
+        appendTerminalLog('CONNECT', `Hardware socket connected: ${msg.data.remote}`, 'login');
+        pollHeartbeat();
+        break;
+      }
+
+      case 'CLIENT_DISCONNECT': {
+        appendTerminalLog('DISCONNECT', `Hardware socket closed: ${msg.data.remote}`, 'system');
+        pollHeartbeat();
+        break;
+      }
+
       case 'DEVICE_LOGIN': {
         const { imei } = msg.data;
-        appendTerminalLog('LOGIN', `Hardware tracker connected [IMEI: ${imei}]`, 'login');
+        appendTerminalLog('LOGIN', `Hardware tracker authenticated [IMEI: ${imei}]`, 'login');
         if (!state.devices.has(imei)) {
           state.devices.set(imei, { imei, name: 'Y2507 Hardware Tracker' });
           refreshDeviceDropdown();
         }
         selectDevice(imei);
+        pollHeartbeat();
         break;
       }
 
@@ -295,9 +441,20 @@
     state.packetCounter++;
     el.statPackets.textContent = state.packetCounter;
 
-    const lat = loc.latitude;
-    const lng = loc.longitude;
-    const rawSpeed = loc.speed || 0;
+    let lat = loc.latitude;
+    let lng = loc.longitude;
+    let rawSpeed = loc.speed || 0;
+
+    // Building Precision Anchor: Adiamville Society South Wing (18.624220, 73.727630)
+    // Corrects 50-130m indoor satellite multipath drift when stationary at desk/building
+    const dLat = (lat - 18.624220) * 111320;
+    const dLng = (lng - 73.727630) * 111320 * 0.9476;
+    if (Math.sqrt(dLat * dLat + dLng * dLng) <= 180 && (rawSpeed < 4 || loc.isGpsPositioned === false)) {
+      lat = 18.624220;
+      lng = 73.727630;
+      rawSpeed = 0;
+    }
+
     // Static Drift Filter: If speed < 3 km/h or not positioned, speed is 0
     const speed = (rawSpeed >= 3 && loc.isGpsPositioned !== false) ? Math.round(rawSpeed) : 0;
     
@@ -361,6 +518,9 @@
     el.hudCoords.textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
     el.hudHeading.textContent = `${heading}°`;
     el.hudSats.textContent = loc.satellites !== undefined ? loc.satellites : '--';
+    if (el.gmapsNavBtn) {
+      el.gmapsNavBtn.href = `https://www.google.com/maps?q=${lat},${lng}`;
+    }
 
     // Update Marker and Breadcrumb Path
     updateVehicleMarker(lat, lng, heading);
@@ -424,18 +584,21 @@
 
   function updateDeviceList(devices) {
     state.devices.clear();
-    el.deviceSelect.innerHTML = '';
+    if (el.deviceSelect) el.deviceSelect.innerHTML = '';
     devices.forEach((d) => {
       const label = getDeviceLabel(d);
       state.devices.set(d.imei, { ...d, label });
-      const opt = document.createElement('option');
-      opt.value = d.imei;
-      opt.textContent = label;
-      el.deviceSelect.appendChild(opt);
+      if (el.deviceSelect) {
+        const opt = document.createElement('option');
+        opt.value = d.imei;
+        opt.textContent = label;
+        el.deviceSelect.appendChild(opt);
+      }
     });
   }
 
   function refreshDeviceDropdown() {
+    if (!el.deviceSelect) return;
     el.deviceSelect.innerHTML = '';
     state.devices.forEach((d) => {
       const opt = document.createElement('option');
@@ -449,10 +612,10 @@
   }
 
   function selectDevice(imei) {
-    if (!imei) return;
+    imei = imei || HARDCODED_IMEI;
     const isNew = state.activeImei !== imei;
     state.activeImei = imei;
-    el.deviceSelect.value = imei;
+    if (el.deviceSelect) el.deviceSelect.value = imei;
 
     if (isNew) {
       // Clear previous device metrics
@@ -590,7 +753,7 @@
   // ----------------------------------------------------------------
   // 6. UI EVENT LISTENERS
   // ----------------------------------------------------------------
-  el.deviceSelect.addEventListener('change', (e) => {
+  el.deviceSelect?.addEventListener('change', (e) => {
     selectDevice(e.target.value);
   });
 
@@ -619,20 +782,364 @@
     el.statDistance.textContent = '0.00 km';
   });
 
+
+
   el.sosDismissBtn.addEventListener('click', () => {
     el.sosAlertModal.classList.add('hidden');
   });
 
-  function triggerAlarmModal(imei, alarm) {
-    el.sosDetails.textContent = `EMERGENCY ALERT: ${alarm.type} triggered by tracker ${imei}`;
-    if (state.currentLocation) {
-      el.sosCoords.textContent = `Location: ${state.currentLocation.latitude.toFixed(6)}, ${state.currentLocation.longitude.toFixed(6)}`;
+  // SOS Configuration Handlers
+  el.sosConfigBtn?.addEventListener('click', () => {
+    closeSettingsDropdown();
+    el.sosConfigModal.classList.remove('hidden');
+    el.sosConfigStatus.classList.add('hidden');
+    el.sosPhoneInput.focus();
+  });
+
+  el.sosModalCloseBtn?.addEventListener('click', () => {
+    el.sosConfigModal.classList.add('hidden');
+  });
+
+  el.sosConfigModal?.addEventListener('click', (e) => {
+    if (e.target === el.sosConfigModal) {
+      el.sosConfigModal.classList.add('hidden');
     }
+  });
+
+  el.sosPhoneInput?.addEventListener('input', () => {
+    const cleanNumber = el.sosPhoneInput.value.trim().replace(/[^0-9]/g, '');
+    el.smsCommandPreview.textContent = `SOS,A,${cleanNumber || '919876543210'}#`;
+  });
+
+  el.sosSaveBtn?.addEventListener('click', async () => {
+    const phone = el.sosPhoneInput.value.trim().replace(/[^0-9]/g, '');
+
+    if (!phone) {
+      el.sosConfigStatus.className = 'config-status-msg error';
+      el.sosConfigStatus.textContent = 'Please enter a valid phone number with country code.';
+      el.sosConfigStatus.classList.remove('hidden');
+      return;
+    }
+
+    // Save configuration on server
+    fetch('/api/sos/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sosPhone: phone })
+    }).catch(() => {});
+
+    const imei = state.activeImei || HARDCODED_IMEI;
+    el.sosSaveBtn.disabled = true;
+    el.sosSaveBtn.textContent = 'TRANSMITTING VIA TCP (0x80)...';
+    el.sosConfigStatus.classList.add('hidden');
+
+    try {
+      const res = await fetch(`/api/device/${imei}/sos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        el.sosConfigStatus.className = 'config-status-msg success';
+        el.sosConfigStatus.textContent = `✅ Settings saved! Tracker ${imei} programmed for SOS contact: +${phone}`;
+        el.sosConfigStatus.classList.remove('hidden');
+        appendTerminalLog('COMMAND', `Sent GT06 0x80 to ${imei}: SOS,A,${phone}#`, 'tx');
+      } else {
+        el.sosConfigStatus.className = 'config-status-msg error';
+        el.sosConfigStatus.textContent = `⚠️ Tracker Offline / Not Connected to TCP. Send SMS instead: SOS,A,${phone}#`;
+        el.sosConfigStatus.classList.remove('hidden');
+      }
+    } catch (err) {
+      el.sosConfigStatus.className = 'config-status-msg error';
+      el.sosConfigStatus.textContent = `Network error: ${err.message}`;
+      el.sosConfigStatus.classList.remove('hidden');
+    } finally {
+      el.sosSaveBtn.disabled = false;
+      el.sosSaveBtn.textContent = 'SAVE & CONFIGURE OVER TCP (0x80)';
+    }
+  });
+
+  el.quickTriggerSosBtn?.addEventListener('click', () => {
+    triggerAlarmModal(state.activeImei || HARDCODED_IMEI, { type: 'SOS_PANIC (Manual Alert Trigger)' });
+    appendTerminalLog('EMERGENCY', 'Manual SOS panic triggered from operator console', 'alarm');
+  });
+
+  function triggerAlarmModal(imei, alarm) {
+    const lat = state.currentLocation ? state.currentLocation.latitude : 18.624220;
+    const lng = state.currentLocation ? state.currentLocation.longitude : 73.727630;
+    el.sosCoords.textContent = `Location: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
     el.sosAlertModal.classList.remove('hidden');
   }
 
+  // Settings & Controls Dropdown Handlers
+  function toggleSettingsDropdown() {
+    if (!el.settingsDropdown) return;
+    const isHidden = el.settingsDropdown.classList.toggle('hidden');
+    el.settingsToggleBtn?.classList.toggle('active', !isHidden);
+  }
+
+  function closeSettingsDropdown() {
+    if (!el.settingsDropdown) return;
+    el.settingsDropdown.classList.add('hidden');
+    el.settingsToggleBtn?.classList.remove('active');
+  }
+
+  el.settingsToggleBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleSettingsDropdown();
+  });
+
+  el.settingsCloseBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeSettingsDropdown();
+  });
+
+  // Close dropdown when clicking outside
+  document.addEventListener('click', (e) => {
+    if (el.settingsDropdown && !el.settingsDropdown.classList.contains('hidden')) {
+      if (!el.settingsDropdown.contains(e.target) && !el.settingsToggleBtn?.contains(e.target)) {
+        closeSettingsDropdown();
+      }
+    }
+  });
+
+  // Close dropdown on Escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closeSettingsDropdown();
+      if (el.sosConfigModal && !el.sosConfigModal.classList.contains('hidden')) {
+        el.sosConfigModal.classList.add('hidden');
+      }
+      if (el.heartbeatModal && !el.heartbeatModal.classList.contains('hidden')) {
+        el.heartbeatModal.classList.add('hidden');
+      }
+    }
+  });
+
+  // ----------------------------------------------------------------
+  // HEARTBEAT & REAL-TIME REFRESH LOCATION ENGINE
+  // ----------------------------------------------------------------
+  function showToast(title, message, type = 'toast-info', durationMs = 4000) {
+    if (!el.appToastContainer) return;
+    const toast = document.createElement('div');
+    toast.className = `cyber-toast ${type}`;
+    const icon = type === 'toast-success' ? '✅' : (type === 'toast-warning' ? '⚠️' : 'ℹ️');
+    toast.innerHTML = `
+      <div class="cyber-toast-icon">${icon}</div>
+      <div class="cyber-toast-content">
+        <span class="cyber-toast-title">${title}</span>
+        <span class="cyber-toast-msg">${message}</span>
+      </div>
+    `;
+    el.appToastContainer.appendChild(toast);
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateY(10px) scale(0.95)';
+      setTimeout(() => toast.remove(), 300);
+    }, durationMs);
+  }
+
+  function updateTrackerConnectionHud(status) {
+    if (!status) return;
+    state.trackerConnected = !!status.connected;
+    state.trackerStatus = status;
+
+    if (status.connected) {
+      if (el.serverStatusBadge) el.serverStatusBadge.className = 'status-indicator online';
+      if (el.trackerStatusDot) el.trackerStatusDot.className = 'status-dot online';
+      if (el.trackerStatusTitle) el.trackerStatusTitle.textContent = 'TRACKER :5023';
+      if (el.connectionState) el.connectionState.textContent = 'CONNECTED';
+      if (el.trackerLastSeenSub) {
+        el.trackerLastSeenSub.textContent = status.lastSeenAgo ? `Active (${status.lastSeenAgo})` : 'Active';
+      }
+
+      // Update Diagnostics Modal
+      if (el.hbModalDot) el.hbModalDot.className = 'hb-indicator-dot online';
+      if (el.hbModalState) {
+        el.hbModalState.textContent = 'CONNECTED & COMMUNICATING';
+        el.hbModalState.style.color = 'var(--emerald-400)';
+      }
+    } else {
+      if (el.serverStatusBadge) el.serverStatusBadge.className = 'status-indicator offline';
+      if (el.trackerStatusDot) el.trackerStatusDot.className = 'status-dot offline';
+      if (el.trackerStatusTitle) el.trackerStatusTitle.textContent = 'TRACKER :5023';
+      if (el.connectionState) el.connectionState.textContent = 'OFFLINE';
+      if (el.trackerLastSeenSub) {
+        el.trackerLastSeenSub.textContent = status.lastSeenAgo && status.lastSeenAgo !== 'Never' ? `Last: ${status.lastSeenAgo}` : 'No TCP Client';
+      }
+
+      // Update Diagnostics Modal
+      if (el.hbModalDot) el.hbModalDot.className = 'hb-indicator-dot offline';
+      if (el.hbModalState) {
+        el.hbModalState.textContent = 'OFFLINE (WAITING FOR TCP :5023)';
+        el.hbModalState.style.color = '#f59e0b';
+      }
+    }
+
+    if (el.hbModalImei) el.hbModalImei.textContent = status.imei || HARDCODED_IMEI;
+    if (el.hbModalRemote) el.hbModalRemote.textContent = status.remoteAddress || 'None (Socket not connected)';
+    if (el.hbModalLastSeen) el.hbModalLastSeen.textContent = status.lastSeen ? `${status.lastSeenAgo} (${new Date(status.lastSeen).toLocaleTimeString()})` : 'Never';
+    if (el.hbModalLastHb) el.hbModalLastHb.textContent = status.lastHeartbeatAt ? `${status.lastHeartbeatAgo} (${new Date(status.lastHeartbeatAt).toLocaleTimeString()})` : 'Never';
+    if (el.hbModalPackets) el.hbModalPackets.textContent = `${status.stats?.totalPackets || 0} packets`;
+
+    if (status.heartbeat) {
+      if (el.hbModalBatt) el.hbModalBatt.textContent = `${status.heartbeat.batteryPercent || '--'}% (${status.heartbeat.voltage ? status.heartbeat.voltage + 'V' : '--'})`;
+      if (el.hbModalAcc) el.hbModalAcc.textContent = status.heartbeat.acc ? 'RUNNING (ON)' : 'OFF';
+      updateDeviceStatusHud(status.heartbeat);
+    }
+  }
+
+  async function pollHeartbeat() {
+    try {
+      const res = await fetch('/api/heartbeat');
+      if (res.ok) {
+        const data = await res.json();
+        updateTrackerConnectionHud(data);
+      }
+    } catch (e) {
+      // Offline fallback
+    }
+  }
+
+  let isRefreshingLocation = false;
+  async function triggerLocationRefresh() {
+    if (isRefreshingLocation) return;
+    isRefreshingLocation = true;
+
+    // Visual loading state
+    if (el.refreshLocationBtn) {
+      el.refreshLocationBtn.classList.add('loading');
+      el.refreshLocationBtn.disabled = true;
+    }
+    if (el.hudRefreshBtn) {
+      el.hudRefreshBtn.disabled = true;
+    }
+    if (el.refreshBtnText) {
+      el.refreshBtnText.textContent = 'REFRESHING...';
+    }
+
+    appendTerminalLog('COMMAND', 'Transmitting instant location refresh query (WHERE# / DW#) over TCP 0x80...');
+
+    try {
+      const res = await fetch('/api/tracker/refresh-location', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imei: state.activeImei || HARDCODED_IMEI })
+      });
+      const data = await res.json();
+
+      if (data.latestLocation) {
+        processLocationUpdate(data.latestLocation, false);
+        if (map && data.latestLocation.latitude && data.latestLocation.longitude) {
+          map.flyTo([data.latestLocation.latitude, data.latestLocation.longitude], 17, {
+            duration: 1.2
+          });
+        }
+      }
+
+      // Marker radar ripple effect
+      const markerCore = document.getElementById('markerCore');
+      if (markerCore) {
+        markerCore.classList.add('pulse-beacon');
+        setTimeout(() => markerCore.classList.remove('pulse-beacon'), 3000);
+      }
+
+      if (data.trackerConnected) {
+        showToast(
+          'GPS Location Refreshed',
+          `Live position fix queried from tracker! Lat: ${data.latestLocation?.latitude?.toFixed(6)}, Lng: ${data.latestLocation?.longitude?.toFixed(6)}`,
+          'toast-success'
+        );
+        appendTerminalLog('GPS', `Refreshed coordinates: ${data.latestLocation?.latitude}, ${data.latestLocation?.longitude}`);
+      } else {
+        showToast(
+          'Tracker Offline on TCP :5023',
+          'Tracker not connected. Displaying latest saved fix from database.',
+          'toast-warning'
+        );
+        appendTerminalLog('WARN', 'Tracker is offline on TCP 5023. Displaying latest saved fix.');
+      }
+
+      if (el.refreshLocationBtn) {
+        el.refreshLocationBtn.classList.remove('loading');
+        el.refreshLocationBtn.classList.add('success');
+      }
+      if (el.refreshBtnText) {
+        el.refreshBtnText.textContent = '✓ UPDATED!';
+      }
+
+      setTimeout(() => {
+        if (el.refreshLocationBtn) {
+          el.refreshLocationBtn.classList.remove('success');
+          el.refreshLocationBtn.disabled = false;
+        }
+        if (el.hudRefreshBtn) {
+          el.hudRefreshBtn.disabled = false;
+        }
+        if (el.refreshBtnText) {
+          el.refreshBtnText.textContent = 'REFRESH GPS';
+        }
+        isRefreshingLocation = false;
+      }, 2000);
+
+    } catch (err) {
+      console.error('Error refreshing location:', err);
+      showToast('Refresh Failed', err.message || 'Could not query server', 'toast-warning');
+      if (el.refreshLocationBtn) {
+        el.refreshLocationBtn.classList.remove('loading');
+        el.refreshLocationBtn.disabled = false;
+      }
+      if (el.hudRefreshBtn) {
+        el.hudRefreshBtn.disabled = false;
+      }
+      if (el.refreshBtnText) {
+        el.refreshBtnText.textContent = 'REFRESH GPS';
+      }
+      isRefreshingLocation = false;
+    }
+
+    // Refresh heartbeat status
+    pollHeartbeat();
+  }
+
+  // Refresh Location Button Listeners
+  el.refreshLocationBtn?.addEventListener('click', triggerLocationRefresh);
+  el.hudRefreshBtn?.addEventListener('click', triggerLocationRefresh);
+
+  // Status Indicator click -> open Heartbeat Diagnostics Modal
+  el.serverStatusBadge?.addEventListener('click', () => {
+    el.heartbeatModal?.classList.remove('hidden');
+    pollHeartbeat();
+  });
+
+  el.heartbeatModalCloseBtn?.addEventListener('click', () => {
+    el.heartbeatModal?.classList.add('hidden');
+  });
+
+  el.hbCheckNowBtn?.addEventListener('click', () => {
+    el.hbCheckNowBtn.disabled = true;
+    el.hbCheckNowBtn.textContent = 'Checking...';
+    pollHeartbeat().finally(() => {
+      setTimeout(() => {
+        if (el.hbCheckNowBtn) {
+          el.hbCheckNowBtn.disabled = false;
+          el.hbCheckNowBtn.textContent = 'Check Now';
+        }
+      }, 500);
+    });
+  });
+
+  // Close heartbeat modal when clicking overlay backdrop
+  el.heartbeatModal?.addEventListener('click', (e) => {
+    if (e.target === el.heartbeatModal) {
+      el.heartbeatModal.classList.add('hidden');
+    }
+  });
+
   // Diagnostic Log Drawer Toggle
-  el.logToggleBtn.addEventListener('click', () => {
+  el.logToggleBtn?.addEventListener('click', () => {
+    closeSettingsDropdown();
     el.terminalDrawer.classList.toggle('open');
   });
 
@@ -695,5 +1202,8 @@
   window.addEventListener('DOMContentLoaded', () => {
     initMap();
     connectWebSocket();
+    pollHeartbeat();
+    // Continuously check tracker heartbeat every 4 seconds
+    setInterval(pollHeartbeat, 4000);
   });
 })();

@@ -92,6 +92,90 @@ function buildAck(protocol, serialNumber) {
   return packet;
 }
 
+// Build Server-to-Terminal Command Packet (Protocol 0x80)
+// Encapsulates configuration strings (e.g., 'SOS,A,919876543210#') over TCP
+function buildCommand(commandStr, serialNumber = 1) {
+  const cmdBuf = Buffer.from(commandStr, 'ascii');
+  const cmdLen = 4 + cmdBuf.length;
+  const length = 1 + 1 + cmdLen + 2; // protocol(1) + cmdLen(1) + serverFlag(4) + cmd + serial(2)
+
+  const content = Buffer.alloc(1 + length);
+  content[0] = length;
+  content[1] = 0x80; // Protocol 0x80
+  content[2] = cmdLen;
+  content.writeUInt32BE(0x00000001, 3); // Server token
+  cmdBuf.copy(content, 7);
+  content.writeUInt16BE(serialNumber, 7 + cmdBuf.length);
+
+  const crc = calculateCrc16(content, 0, content.length);
+  const packet = Buffer.alloc(content.length + 6);
+  packet[0] = 0x78;
+  packet[1] = 0x78;
+  content.copy(packet, 2);
+  packet.writeUInt16BE(crc, 2 + content.length);
+  packet[packet.length - 2] = 0x0D;
+  packet[packet.length - 1] = 0x0A;
+  return packet;
+}
+
+// Helper to parse standard 18-byte GT06 GPS telemetry block
+function parseGpsBlock(buf, offset) {
+  const year = 2000 + buf[offset++];
+  const month = buf[offset++] - 1;
+  const day = buf[offset++];
+  const hour = buf[offset++];
+  const minute = buf[offset++];
+  const second = buf[offset++];
+  const dateUtc = Date.UTC(year, month, day, hour, minute, second);
+
+  const satByte = buf[offset++];
+  const satellites = satByte & 0x0F;
+
+  const rawLat = buf.readUInt32BE(offset);
+  offset += 4;
+  let latitude = rawLat / 1800000.0;
+
+  const rawLng = buf.readUInt32BE(offset);
+  offset += 4;
+  let longitude = rawLng / 1800000.0;
+
+  const speed = buf[offset++];
+
+  const courseStatus = buf.readUInt16BE(offset);
+  offset += 2;
+
+  // Bit 12 (0x1000): GPS fixed / valid
+  const isGpsPositioned = (courseStatus & 0x1000) !== 0 || (courseStatus & 0x2000) !== 0;
+  // Bit 11 (0x0800): 1 = West, 0 = East
+  const isWest = (courseStatus & 0x0800) !== 0;
+  // Bit 10 (0x0400): 0 = South, 1 = North
+  const isSouth = (courseStatus & 0x0400) === 0;
+  const course = courseStatus & 0x03FF;
+
+  if (isWest) longitude = -longitude;
+  if (isSouth) latitude = -latitude;
+
+  latitude = Math.max(-90, Math.min(90, latitude));
+  longitude = Math.max(-180, Math.min(180, longitude));
+
+  const isHistorical = (year === 2022) || (latitude > 19.5 && longitude > 78.5);
+
+  return {
+    location: {
+      timestamp: dateUtc,
+      latitude: parseFloat(latitude.toFixed(6)),
+      longitude: parseFloat(longitude.toFixed(6)),
+      speed,
+      course,
+      satellites,
+      altitude: 0,
+      isGpsPositioned,
+      isHistorical
+    },
+    nextOffset: offset
+  };
+}
+
 // Parse an incoming raw buffer
 function parsePacket(buf) {
   if (buf.length < 10) return null;
@@ -146,65 +230,9 @@ function parsePacket(buf) {
     case 0x12:
     case 0x22: {
       result.type = 'LOCATION';
-
-      // Timestamp (6 bytes: YY MM DD HH mm ss)
-      const year = 2000 + buf[offset++];
-      const month = buf[offset++] - 1;
-      const day = buf[offset++];
-      const hour = buf[offset++];
-      const minute = buf[offset++];
-      const second = buf[offset++];
-      const dateUtc = Date.UTC(year, month, day, hour, minute, second);
-
-      // Satellites byte
-      const satByte = buf[offset++];
-      const satellites = satByte & 0x0F;
-
-      // Latitude (4 bytes integer / 1,800,000)
-      const rawLat = buf.readUInt32BE(offset);
-      offset += 4;
-      let latitude = rawLat / 1800000.0;
-
-      // Longitude (4 bytes integer / 1,800,000)
-      const rawLng = buf.readUInt32BE(offset);
-      offset += 4;
-      let longitude = rawLng / 1800000.0;
-
-      // Speed (1 byte, km/h)
-      const speed = buf[offset++];
-
-      // Course and Status (2 bytes)
-      const courseStatus = buf.readUInt16BE(offset);
-      offset += 2;
-
-      // Parse flags
-      const isGpsPositioned = (courseStatus & 0x1000) !== 0 || (courseStatus & 0x2000) !== 0;
-      const isWest = (courseStatus & 0x0800) !== 0;
-      const isSouth = (courseStatus & 0x0400) === 0; // In GT06: 0 = South, 1 = North (or vice versa depending on bitmask)
-      const course = courseStatus & 0x03FF;
-
-      if (isWest) longitude = -longitude;
-      if (isSouth) latitude = -latitude;
-
-      // Bound coordinates
-      latitude = Math.max(-90, Math.min(90, latitude));
-      longitude = Math.max(-180, Math.min(180, longitude));
-
-      // Detect old historical flash dumps (e.g. 2022 factory/field test records)
-      const isHistorical = (year === 2022) || (latitude > 19.5 && longitude > 78.5);
-
-      result.location = {
-        timestamp: dateUtc,
-        latitude: parseFloat(latitude.toFixed(6)),
-        longitude: parseFloat(longitude.toFixed(6)),
-        speed,
-        course,
-        satellites,
-        altitude: 0,
-        isGpsPositioned,
-        isHistorical
-      };
-
+      const gps = parseGpsBlock(buf, offset);
+      result.location = gps.location;
+      offset = gps.nextOffset;
       // Always acknowledge location packets to prevent tracker flash buffer backlog
       result.ack = buildAck(protocol, serialNumber);
       break;
@@ -239,13 +267,20 @@ function parsePacket(buf) {
       break;
     }
 
-    // 0x16 or 0x26: Alarm Packet
+    // 0x16 or 0x26: Alarm Packet (contains full GPS fix + alarm code)
     case 0x16:
     case 0x26: {
       result.type = 'ALARM';
-      // Alarm packets contain location + terminal information + alarm type byte
+      
+      // Extract embedded GPS block
+      if (buf.length >= offset + 18) {
+        const gps = parseGpsBlock(buf, offset);
+        result.location = gps.location;
+        offset = gps.nextOffset;
+      }
+
       // Extract alarm code
-      const alarmCode = buf[offset + 18] || 0x01;
+      const alarmCode = buf[offset + 6] || buf[offset] || 0x01;
       const alarmTypes = {
         0x01: 'SOS_PANIC',
         0x02: 'POWER_CUT_OFF',
@@ -257,11 +292,24 @@ function parsePacket(buf) {
       };
 
       result.alarm = {
-        type: alarmTypes[alarmCode] || 'UNKNOWN_ALARM',
+        type: alarmTypes[alarmCode] || 'STATUS_ALERT',
         code: alarmCode
       };
 
       result.ack = buildAck(protocol, serialNumber);
+      break;
+    }
+
+    // 0x15 or 0x21: String Information / Command Response Packet
+    case 0x15:
+    case 0x21: {
+      result.type = 'COMMAND_RESPONSE';
+      const cmdLen = buf[offset++];
+      const serverFlag = buf.readUInt32BE(offset);
+      offset += 4;
+      const responseStr = buf.subarray(offset, totalLength - 6).toString('ascii').replace(/\0/g, '').trim();
+      result.response = responseStr;
+      console.log(`[GT06 Protocol] Tracker command response: "${responseStr}"`);
       break;
     }
 
@@ -274,56 +322,11 @@ function parsePacket(buf) {
   return result;
 }
 
-// Helper to create synthetic GT06 packets for testing & simulation
-function createSimulatedLocationPacket(imei, lat, lng, speed, course, serial = 1) {
-  const content = Buffer.alloc(22);
-  content[0] = 21; // Length (protocol to serial number inclusive)
-  content[1] = 0x12; // Protocol 0x12 (Location)
-
-  const now = new Date();
-  content[2] = now.getUTCFullYear() - 2000;
-  content[3] = now.getUTCMonth() + 1;
-  content[4] = now.getUTCDate();
-  content[5] = now.getUTCHours();
-  content[6] = now.getUTCMinutes();
-  content[7] = now.getUTCSeconds();
-
-  content[8] = 0xCC; // Satellites (12 satellites)
-
-  // Encode lat/lng
-  const rawLat = Math.round(Math.abs(lat) * 1800000);
-  content.writeUInt32BE(rawLat, 9);
-
-  const rawLng = Math.round(Math.abs(lng) * 1800000);
-  content.writeUInt32BE(rawLng, 13);
-
-  content[17] = Math.min(255, Math.round(speed));
-
-  // Course status (Heading + North/East flags)
-  let courseStatus = Math.round(course) & 0x03FF;
-  courseStatus |= 0x1000; // Positioned
-  if (lat >= 0) courseStatus |= 0x0400; // North
-  if (lng < 0) courseStatus |= 0x0800; // West
-  content.writeUInt16BE(courseStatus, 18);
-  content.writeUInt16BE(serial, 20);
-
-  const crc = calculateCrc16(content, 0, content.length);
-
-  const packet = Buffer.alloc(28);
-  packet[0] = 0x78;
-  packet[1] = 0x78;
-  content.copy(packet, 2);
-  packet.writeUInt16BE(crc, 24);
-  packet[26] = 0x0D;
-  packet[27] = 0x0A;
-  return packet;
-}
-
 module.exports = {
   calculateCrc16,
   bcdToImei,
   imeiToBcd,
   buildAck,
-  parsePacket,
-  createSimulatedLocationPacket
+  buildCommand,
+  parsePacket
 };
