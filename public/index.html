@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#07090e">
   <title>AeroTrack // Y2507 Real-Time Telematics Core</title>
   <meta name="description" content="Proprietary Real-Time GPS Tracking Dashboard and Telemetry Engine for Y2507-MB-V1.2 Hardware">
 
@@ -15,7 +18,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
 
   <!-- Custom Core Styling -->
-  <link rel="stylesheet" href="css/style.css?v=3.0.0">
+  <link rel="stylesheet" href="css/style.css?v=3.1.0">
 </head>
 <body class="cyber-dark">
 
@@ -86,6 +89,24 @@
     </div>
 
     <div class="settings-dropdown-body">
+      <!-- 0. STREAM MODE SWITCHER (Mobile & Desktop) -->
+      <div class="settings-section" id="settingsModeSection">
+        <div class="settings-section-head">
+          <span class="section-head-title">📡 STREAMING MODE</span>
+          <span class="section-head-tag">CONTROL</span>
+        </div>
+        <div class="settings-layer-grid">
+          <button id="settingsLiveModeBtn" class="layer-pill-btn active" title="Live Continuous GPS Stream">
+            <span class="layer-btn-icon">⚡</span>
+            <span class="layer-btn-name">LIVE STREAM</span>
+          </button>
+          <button id="settingsHistoryModeBtn" class="layer-pill-btn" title="Replay Recorded Route">
+            <span class="layer-btn-icon">🕒</span>
+            <span class="layer-btn-name">HISTORY REPLAY</span>
+          </button>
+        </div>
+      </div>
+
       <!-- 1. MAP VIEW & LAYERS -->
       <div class="settings-section">
         <div class="settings-section-head">
@@ -164,9 +185,52 @@
   <main class="map-viewport">
     <div id="map"></div>
 
+    <!-- Mobile Floating Quick Telemetry Summary Bar & Toggle Handle -->
+    <div class="mobile-hud-bar" id="mobileHudBar">
+      <button class="mobile-hud-pill" id="mobileHudToggleBtn" aria-expanded="false" title="Toggle Vehicle Telemetry HUD">
+        <div class="m-pill-item m-speed">
+          <span class="m-val" id="mobileSpeedVal">0</span>
+          <span class="m-unit">KM/H</span>
+        </div>
+        <div class="m-pill-divider"></div>
+        <div class="m-pill-item m-acc">
+          <span class="m-icon">🔑</span>
+          <span class="m-val status-off" id="mobileAccVal">OFF</span>
+        </div>
+        <div class="m-pill-divider"></div>
+        <div class="m-pill-item m-batt">
+          <span class="m-icon">🔋</span>
+          <span class="m-val" id="mobileBattVal">--%</span>
+        </div>
+        <div class="m-toggle-indicator">
+          <span class="m-toggle-text" id="mobileHudToggleText">METRICS</span>
+          <span class="m-toggle-arrow" id="mobileHudArrow">▲</span>
+        </div>
+      </button>
+    </div>
 
-    <!-- Floating Top Telemetry HUD -->
+    <!-- Mobile Floating Action Buttons (FAB) for Recenter & Quick Refresh -->
+    <div class="mobile-fab-container" id="mobileFabContainer">
+      <button id="mobileRecenterFab" class="mobile-fab" title="Recenter Camera on Vehicle">
+        <span class="fab-icon">🎯</span>
+      </button>
+      <button id="mobileRefreshFab" class="mobile-fab" title="Refresh Live GPS Position">
+        <span class="fab-icon" id="mobileRefreshFabSpinner">🔄</span>
+      </button>
+    </div>
+
+    <!-- Floating Top Telemetry HUD (Collapsible on Mobile, Static Row on Desktop) -->
     <div class="telemetry-hud" id="telemetryHud">
+      <!-- Mobile Close / Minimize Bar -->
+      <div class="hud-mobile-header" id="hudMobileHeader">
+        <div class="hud-mobile-title">
+          <span class="pulse-core-sm"></span>
+          <span>LIVE TELEMETRY HUD</span>
+        </div>
+        <button id="hudMobileCloseBtn" class="hud-mobile-close-btn" title="Minimize Telemetry Cards">
+          <span>▼ MINIMIZE</span>
+        </button>
+      </div>
       <!-- Speedometer Gauge Card -->
       <div class="hud-card speed-card">
         <div class="speed-gauge-ring">

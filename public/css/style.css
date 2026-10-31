@@ -43,11 +43,13 @@ body.cyber-dark {
   color: var(--text-main);
   font-family: var(--font-ui);
   height: 100vh;
+  height: 100dvh;
   width: 100vw;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* ------------------------------------------------------------- */
@@ -1533,23 +1535,518 @@ body.cyber-dark {
 }
 
 
-/* Responsive Breakpoints */
-@media (max-width: 900px) {
+/* ------------------------------------------------------------- */
+/* MOBILE TELEMETRY HUD BAR & FLOATING ACTIONS (FAB)             */
+/* ------------------------------------------------------------- */
+.mobile-hud-bar {
+  display: none;
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  z-index: 910;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.mobile-hud-pill {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(10, 14, 23, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(6, 182, 212, 0.4);
+  border-radius: var(--radius-full);
+  padding: 6px 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 16px rgba(6, 182, 212, 0.2);
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  font-family: var(--font-ui);
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-hud-pill:active {
+  transform: scale(0.96);
+  background: rgba(14, 21, 35, 0.98);
+}
+
+.m-pill-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.m-speed .m-val {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+.m-speed .m-unit {
+  font-size: 0.6rem;
+  color: var(--cyan-400);
+  font-weight: 700;
+}
+
+.m-pill-divider {
+  width: 1px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.m-icon {
+  font-size: 0.82rem;
+  line-height: 1;
+}
+
+.m-toggle-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(6, 182, 212, 0.18);
+  border: 1px solid rgba(6, 182, 212, 0.35);
+  color: var(--cyan-400);
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.m-toggle-arrow {
+  transition: transform 0.25s ease;
+  font-size: 0.65rem;
+}
+
+.mobile-hud-pill.expanded .m-toggle-arrow {
+  transform: rotate(180deg);
+}
+
+.mobile-fab-container {
+  display: none;
+  position: absolute;
+  bottom: 24px;
+  right: 14px;
+  z-index: 905;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.mobile-fab {
+  pointer-events: auto;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(13, 18, 28, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(6, 182, 212, 0.4);
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 12px rgba(6, 182, 212, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-fab:active {
+  transform: scale(0.92);
+  background: rgba(6, 182, 212, 0.25);
+}
+
+.mobile-fab .fab-icon {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.mobile-fab.loading #mobileRefreshFabSpinner {
+  display: inline-block;
+  animation: spin-refresh 0.75s linear infinite;
+}
+
+.hud-mobile-header {
+  display: none;
+}
+
+.pulse-core-sm {
+  width: 8px;
+  height: 8px;
+  background-color: var(--cyan-400);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--cyan-400);
+  animation: pulse-ring 2s infinite ease-in-out;
+}
+
+/* ------------------------------------------------------------- */
+/* RESPONSIVE DESIGN BREAKPOINTS                                  */
+/* ------------------------------------------------------------- */
+
+/* Tablet & Smaller Desktops */
+@media (max-width: 1024px) {
+  .app-header {
+    padding: 0 14px;
+  }
   .telemetry-hud {
-    flex-direction: column;
-    width: auto;
-    right: auto;
+    gap: 10px;
   }
-  .state-card, .stats-card, .speed-card {
-    width: 280px;
+  .speed-card {
+    width: 160px;
   }
+  .speed-gauge-ring {
+    width: 90px;
+    height: 90px;
+  }
+  .speed-value {
+    font-size: 1.8rem;
+  }
+  .state-card {
+    max-width: 380px;
+  }
+  .stats-card {
+    width: 220px;
+  }
+}
+
+/* Mobile Phones & Handheld Devices */
+@media (max-width: 768px) {
+  body.cyber-dark {
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  .app-header {
+    height: 56px;
+    padding: 0 12px;
+    padding-top: env(safe-area-inset-top, 0);
+  }
+
+  .map-viewport {
+    height: calc(100vh - 56px);
+    height: calc(100dvh - 56px);
+  }
+
+  .brand-title {
+    font-size: 0.98rem;
+    letter-spacing: 1px;
+  }
+  .brand-subtitle {
+    display: none;
+  }
+
   .header-center {
     display: none;
   }
-  .floating-dispatch-bar {
+
+  .header-right {
+    gap: 8px;
+  }
+
+  /* Header compact buttons */
+  .btn-refresh-loc {
+    padding: 6px 10px;
+    font-size: 0.72rem;
+  }
+  .btn-refresh-loc #refreshBtnText {
+    display: none;
+  }
+
+  .btn-settings {
+    padding: 6px 10px;
+    gap: 0;
+  }
+  .btn-settings .btn-text,
+  .btn-settings .settings-active-pill,
+  .btn-settings .settings-chevron {
+    display: none;
+  }
+
+  .status-indicator {
+    padding: 5px 8px;
+    gap: 6px;
+  }
+  .status-title {
+    display: none;
+  }
+  .status-sub {
+    display: none;
+  }
+  .status-val {
+    font-size: 0.7rem;
+  }
+
+  /* Enable mobile HUD pill and floating FAB buttons */
+  .mobile-hud-bar {
+    display: flex;
+  }
+  .mobile-fab-container {
+    display: flex;
+  }
+
+  .hud-mobile-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 10px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  .hud-mobile-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.75rem;
+    font-weight: 800;
+    font-family: var(--font-mono);
+    color: var(--cyan-400);
+    letter-spacing: 0.5px;
+  }
+  .hud-mobile-close-btn {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #fff;
+    font-family: var(--font-ui);
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .hud-mobile-close-btn:active {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  /* Telemetry HUD Drawer on Mobile: slides up from bottom smoothly */
+  .telemetry-hud {
+    position: fixed;
     top: auto;
-    bottom: 24px;
-    right: 20px;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    max-height: 85dvh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    flex-direction: column;
+    padding: 16px;
+    padding-bottom: calc(env(safe-area-inset-bottom, 16px) + 16px);
+    background: rgba(8, 12, 20, 0.96);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border-top: 1px solid rgba(6, 182, 212, 0.4);
+    border-left: none;
+    border-right: none;
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.8), 0 0 24px rgba(6, 182, 212, 0.2);
+    z-index: 950;
+    pointer-events: auto;
+    transform: translateY(115%);
+    opacity: 0;
+    visibility: hidden;
+    transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease, visibility 0.32s;
+  }
+
+  .telemetry-hud.mobile-expanded {
+    transform: translateY(0);
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .hud-card {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-bottom: 12px;
+    box-shadow: none;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .speed-card {
+    flex-direction: row;
+    justify-content: space-around;
+    padding: 14px 18px;
+  }
+  .speed-card .hud-card-footer {
+    margin-top: 0;
+    align-items: flex-start;
+  }
+
+  .metric-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .metric-item {
+    padding: 6px 8px;
+  }
+  .metric-value {
+    font-size: 0.85rem;
+  }
+
+  .card-footer-coords {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .gmaps-shortcut-btn {
+    justify-content: center;
+    padding: 7px;
+    font-size: 0.74rem;
+  }
+
+  /* Settings Dropdown on Mobile: acts as a sleek native Bottom Sheet */
+  .settings-dropdown {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-width: 100%;
+    max-height: 85dvh;
+    border-radius: 20px 20px 0 0;
+    border-bottom: none;
+    border-left: none;
+    border-right: none;
+    border-top: 1px solid rgba(6, 182, 212, 0.4);
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.85);
+    padding-bottom: calc(env(safe-area-inset-bottom, 16px) + 12px);
+    animation: slide-up-bottom 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @keyframes slide-up-bottom {
+    from {
+      opacity: 0;
+      transform: translateY(100%);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* History Player on Mobile */
+  .history-player-bar {
+    width: calc(100% - 20px);
+    left: 10px;
+    right: 10px;
+    transform: none;
+    bottom: calc(env(safe-area-inset-bottom, 10px) + 10px);
+    padding: 12px 14px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .player-controls {
+    justify-content: space-between;
+    width: 100%;
+  }
+  .player-timeline {
+    width: 100%;
+  }
+  .player-meta {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  /* Leaflet Zoom Control Position on Mobile: move slightly up so FABs don't overlap */
+  .leaflet-bottom.leaflet-right {
+    bottom: 90px;
+    right: 14px;
+  }
+  .leaflet-touch .leaflet-bar a {
+    width: 38px;
+    height: 38px;
+    line-height: 38px;
+  }
+
+  /* Diagnostics Terminal Drawer on Mobile */
+  .terminal-drawer {
+    height: 40dvh;
+    max-height: 280px;
+  }
+
+  /* Toast Container on Mobile */
+  .app-toast-container {
+    bottom: 20px;
+    left: 12px;
+    right: 12px;
+  }
+  .cyber-toast {
+    min-width: 0;
+    width: 100%;
+    padding: 10px 14px;
+  }
+}
+
+/* Extra Compact Phones (< 480px) */
+@media (max-width: 480px) {
+  .app-header {
+    height: 52px;
+    padding: 0 10px;
+  }
+  .brand-title {
+    font-size: 0.92rem;
+  }
+  .pulse-core {
+    width: 9px;
+    height: 9px;
+  }
+
+  .status-indicator {
+    padding: 4px 6px;
+  }
+  .status-val {
+    font-size: 0.68rem;
+  }
+
+  .settings-layer-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .layer-pill-btn {
+    padding: 8px 6px;
+    font-size: 0.7rem;
+  }
+
+  .custom-modal-card {
+    width: calc(100% - 20px);
+    max-width: 100%;
+    padding: 16px;
+    margin: 10px;
+    max-height: 92dvh;
+  }
+  .modal-title {
+    font-size: 0.95rem;
+  }
+  .hb-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .hb-item {
+    padding: 6px 8px;
+  }
+  .hb-val {
+    font-size: 0.74rem;
+  }
+
+  .sos-alert-modal {
+    top: 60px;
+    width: calc(100% - 20px);
+    left: 10px;
+    right: 10px;
+    transform: none;
+  }
+  .sos-card {
+    padding: 12px 16px;
+    flex-direction: column;
+    text-align: center;
   }
 }
 

@@ -55,7 +55,23 @@
     settingsDropdown: document.getElementById('settingsDropdown'),
     settingsCloseBtn: document.getElementById('settingsCloseBtn'),
     settingsActiveLayerTag: document.getElementById('settingsActiveLayerTag'),
+    settingsLiveModeBtn: document.getElementById('settingsLiveModeBtn'),
+    settingsHistoryModeBtn: document.getElementById('settingsHistoryModeBtn'),
     
+    // Telemetry HUD & Mobile Elements
+    telemetryHud: document.getElementById('telemetryHud'),
+    mobileHudBar: document.getElementById('mobileHudBar'),
+    mobileHudToggleBtn: document.getElementById('mobileHudToggleBtn'),
+    mobileHudToggleText: document.getElementById('mobileHudToggleText'),
+    mobileHudArrow: document.getElementById('mobileHudArrow'),
+    hudMobileCloseBtn: document.getElementById('hudMobileCloseBtn'),
+    mobileSpeedVal: document.getElementById('mobileSpeedVal'),
+    mobileAccVal: document.getElementById('mobileAccVal'),
+    mobileBattVal: document.getElementById('mobileBattVal'),
+    mobileRecenterFab: document.getElementById('mobileRecenterFab'),
+    mobileRefreshFab: document.getElementById('mobileRefreshFab'),
+    mobileRefreshFabSpinner: document.getElementById('mobileRefreshFabSpinner'),
+
     // HUD
     hudRefreshBtn: document.getElementById('hudRefreshBtn'),
     hudSpeed: document.getElementById('hudSpeed'),
@@ -497,6 +513,7 @@
 
     // Update Speed Gauge
     el.hudSpeed.textContent = speed;
+    if (el.mobileSpeedVal) el.mobileSpeedVal.textContent = speed;
     if (loc.isGpsPositioned === false) {
       el.speedState.textContent = 'NO GPS FIX (INDOORS)';
     } else if (speed === 0) {
@@ -545,9 +562,16 @@
     if (status.acc !== undefined) {
       el.hudAcc.textContent = status.acc === 1 ? 'RUNNING' : 'OFF';
       el.hudAcc.className = `metric-value ${status.acc === 1 ? 'status-on' : 'status-off'}`;
+      if (el.mobileAccVal) {
+        el.mobileAccVal.textContent = status.acc === 1 ? 'ON' : 'OFF';
+        el.mobileAccVal.className = `m-val ${status.acc === 1 ? 'status-on' : 'status-off'}`;
+      }
     }
     if (status.batteryPercent !== undefined) {
       el.hudBattery.textContent = `${status.batteryPercent}% (${status.voltage}V)`;
+      if (el.mobileBattVal) {
+        el.mobileBattVal.textContent = `${status.batteryPercent}%`;
+      }
     }
     if (status.gsmSignal !== undefined) {
       updateSignalBars(status.gsmSignal);
@@ -663,7 +687,10 @@
     state.mode = 'history';
     el.liveModeBtn.classList.remove('active');
     el.historyModeBtn.classList.add('active');
+    el.settingsLiveModeBtn?.classList.remove('active');
+    el.settingsHistoryModeBtn?.classList.add('active');
     el.historyPlayerBar.classList.remove('hidden');
+    closeMobileHud();
 
     // Fetch full history from server
     fetch(`/api/history/${state.activeImei}?limit=1000`)
@@ -697,6 +724,8 @@
     state.liveFollow = true;
     el.liveModeBtn.classList.add('active');
     el.historyModeBtn.classList.remove('active');
+    el.settingsLiveModeBtn?.classList.add('active');
+    el.settingsHistoryModeBtn?.classList.remove('active');
     el.historyPlayerBar.classList.add('hidden');
     historyPolyline.setLatLngs([]);
 
@@ -722,6 +751,7 @@
 
     updateVehicleMarker(pt.latitude, pt.longitude, pt.course);
     el.hudSpeed.textContent = Math.round(pt.speed || 0);
+    if (el.mobileSpeedVal) el.mobileSpeedVal.textContent = Math.round(pt.speed || 0);
     el.hudCoords.textContent = `${pt.latitude.toFixed(6)}, ${pt.longitude.toFixed(6)}`;
     el.hudHeading.textContent = `${Math.round(pt.course || 0)}°`;
   }
@@ -765,14 +795,70 @@
     if (state.mode === 'live') enterHistoryMode();
   });
 
+  el.settingsLiveModeBtn?.addEventListener('click', () => {
+    if (state.mode === 'history') exitHistoryMode();
+    closeSettingsDropdown();
+  });
+
+  el.settingsHistoryModeBtn?.addEventListener('click', () => {
+    if (state.mode === 'live') enterHistoryMode();
+    closeSettingsDropdown();
+  });
+
   el.exitHistoryBtn.addEventListener('click', exitHistoryMode);
 
-  el.recenterBtn.addEventListener('click', () => {
+  // Re-center vehicle helper for desktop button & mobile FAB
+  function recenterVehicle() {
     state.liveFollow = true;
-    el.recenterBtn.classList.remove('active');
+    el.recenterBtn?.classList.remove('active');
     if (state.currentLocation) {
-      map.panTo([state.currentLocation.latitude, state.currentLocation.longitude], { animate: true });
+      map.flyTo([state.currentLocation.latitude, state.currentLocation.longitude], 17, {
+        duration: 0.8
+      });
+      showToast('Camera Centered', 'Map centered on live tracker position', 'toast-info', 2000);
+    } else {
+      showToast('Position Pending', 'Waiting for initial GPS coordinates...', 'toast-warning', 2500);
     }
+  }
+
+  el.recenterBtn?.addEventListener('click', recenterVehicle);
+  el.mobileRecenterFab?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    recenterVehicle();
+  });
+
+  el.mobileRefreshFab?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    triggerLocationRefresh();
+  });
+
+  // Mobile HUD Drawer Toggle Handlers
+  function toggleMobileHud() {
+    if (!el.telemetryHud) return;
+    const isExpanded = el.telemetryHud.classList.toggle('mobile-expanded');
+    el.mobileHudToggleBtn?.classList.toggle('expanded', isExpanded);
+    if (el.mobileHudToggleText) {
+      el.mobileHudToggleText.textContent = isExpanded ? 'COLLAPSE' : 'METRICS';
+    }
+  }
+
+  function closeMobileHud() {
+    if (!el.telemetryHud) return;
+    el.telemetryHud.classList.remove('mobile-expanded');
+    el.mobileHudToggleBtn?.classList.remove('expanded');
+    if (el.mobileHudToggleText) {
+      el.mobileHudToggleText.textContent = 'METRICS';
+    }
+  }
+
+  el.mobileHudToggleBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleMobileHud();
+  });
+
+  el.hudMobileCloseBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeMobileHud();
   });
 
   el.clearTrailBtn.addEventListener('click', () => {
@@ -781,8 +867,6 @@
     state.totalDistanceMeters = 0;
     el.statDistance.textContent = '0.00 km';
   });
-
-
 
   el.sosDismissBtn.addEventListener('click', () => {
     el.sosAlertModal.classList.add('hidden');
@@ -1015,6 +1099,9 @@
     if (el.hudRefreshBtn) {
       el.hudRefreshBtn.disabled = true;
     }
+    if (el.mobileRefreshFab) {
+      el.mobileRefreshFab.classList.add('loading');
+    }
     if (el.refreshBtnText) {
       el.refreshBtnText.textContent = 'REFRESHING...';
     }
@@ -1077,6 +1164,9 @@
         if (el.hudRefreshBtn) {
           el.hudRefreshBtn.disabled = false;
         }
+        if (el.mobileRefreshFab) {
+          el.mobileRefreshFab.classList.remove('loading');
+        }
         if (el.refreshBtnText) {
           el.refreshBtnText.textContent = 'REFRESH GPS';
         }
@@ -1092,6 +1182,9 @@
       }
       if (el.hudRefreshBtn) {
         el.hudRefreshBtn.disabled = false;
+      }
+      if (el.mobileRefreshFab) {
+        el.mobileRefreshFab.classList.remove('loading');
       }
       if (el.refreshBtnText) {
         el.refreshBtnText.textContent = 'REFRESH GPS';
@@ -1194,6 +1287,21 @@
         startHistoryReplay();
       }
     });
+  });
+
+  // Handle viewport resize & orientation change smoothly for Leaflet
+  window.addEventListener('resize', () => {
+    if (map) {
+      map.invalidateSize();
+    }
+  });
+
+  window.addEventListener('orientationchange', () => {
+    setTimeout(() => {
+      if (map) {
+        map.invalidateSize();
+      }
+    }, 250);
   });
 
   // ----------------------------------------------------------------
