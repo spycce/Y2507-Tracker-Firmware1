@@ -352,17 +352,11 @@ class TcpIngestionServer {
   getTrackerStatus(targetImei = '860465040325932') {
     let activeClient = null;
 
+    // Only match sockets that have authenticated with this specific IMEI
     for (const [socket, state] of this.clients.entries()) {
-      if (state.imei === targetImei || (!state.imei && this.clients.size === 1)) {
+      if (state.imei === targetImei) {
         activeClient = state;
         break;
-      }
-    }
-
-    if (!activeClient && this.clients.size > 0) {
-      const firstEntry = this.clients.entries().next().value;
-      if (firstEntry) {
-        activeClient = firstEntry[1];
       }
     }
 
@@ -378,6 +372,7 @@ class TcpIngestionServer {
       return {
         connected: true,
         isAlive,
+        socketConnected: true,
         imei: activeClient.imei || targetImei,
         remoteAddress: activeClient.remoteAddress,
         connectedAt: activeClient.connectedAt,
@@ -405,8 +400,9 @@ class TcpIngestionServer {
     const lastSeen = deviceRecord?.last_seen || latestLocation?.timestamp || null;
     const isRecentlyActive = lastSeen ? (Date.now() - lastSeen < 180000) : false;
     return {
-      connected: isRecentlyActive,
-      isAlive: isRecentlyActive,
+      connected: false,
+      isAlive: false,
+      isRecentlyActive,
       socketConnected: false,
       imei: targetImei,
       remoteAddress: null,

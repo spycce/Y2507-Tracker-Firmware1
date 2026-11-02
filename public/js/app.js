@@ -1029,13 +1029,11 @@
     state.trackerConnected = !!status.connected;
     state.trackerStatus = status;
 
-    if (status.connected || status.isAlive) {
+    if (status.socketConnected) {
       if (el.serverStatusBadge) el.serverStatusBadge.className = 'status-indicator online';
       if (el.trackerStatusDot) el.trackerStatusDot.className = 'status-dot online';
       if (el.trackerStatusTitle) el.trackerStatusTitle.textContent = 'TRACKER :5023';
-      if (el.connectionState) {
-        el.connectionState.textContent = status.socketConnected === false ? 'STANDBY (ACTIVE)' : 'CONNECTED';
-      }
+      if (el.connectionState) el.connectionState.textContent = 'LIVE CONNECTED';
       if (el.trackerLastSeenSub) {
         el.trackerLastSeenSub.textContent = status.lastSeenAgo ? `Active (${status.lastSeenAgo})` : 'Active';
       }
@@ -1043,8 +1041,23 @@
       // Update Diagnostics Modal
       if (el.hbModalDot) el.hbModalDot.className = 'hb-indicator-dot online';
       if (el.hbModalState) {
-        el.hbModalState.textContent = status.socketConnected === false ? 'STANDBY (RECENTLY ACTIVE)' : 'CONNECTED & COMMUNICATING';
+        el.hbModalState.textContent = 'LIVE TCP SOCKET CONNECTED';
         el.hbModalState.style.color = 'var(--emerald-400)';
+      }
+    } else if (status.isRecentlyActive) {
+      if (el.serverStatusBadge) el.serverStatusBadge.className = 'status-indicator standby';
+      if (el.trackerStatusDot) el.trackerStatusDot.className = 'status-dot standby';
+      if (el.trackerStatusTitle) el.trackerStatusTitle.textContent = 'TRACKER :5023';
+      if (el.connectionState) el.connectionState.textContent = 'STANDBY (SLEEP)';
+      if (el.trackerLastSeenSub) {
+        el.trackerLastSeenSub.textContent = `Last fix: ${status.lastSeenAgo}`;
+      }
+
+      // Update Diagnostics Modal
+      if (el.hbModalDot) el.hbModalDot.className = 'hb-indicator-dot standby';
+      if (el.hbModalState) {
+        el.hbModalState.textContent = 'STANDBY (NO TCP SOCKET ACTIVE)';
+        el.hbModalState.style.color = '#f59e0b';
       }
     } else {
       if (el.serverStatusBadge) el.serverStatusBadge.className = 'status-indicator offline';
@@ -1059,7 +1072,7 @@
       if (el.hbModalDot) el.hbModalDot.className = 'hb-indicator-dot offline';
       if (el.hbModalState) {
         el.hbModalState.textContent = 'OFFLINE (WAITING FOR TCP :5023)';
-        el.hbModalState.style.color = '#f59e0b';
+        el.hbModalState.style.color = '#94a3b8';
       }
     }
 

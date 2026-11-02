@@ -128,7 +128,8 @@ class TunnelManager {
       publicHost: this.remoteHost,
       publicPort: this.remotePort,
       publicEndpoint: `${this.remoteHost}:${this.remotePort}`,
-      smsCommand: `SERVER,1,${this.remoteHost},${this.remotePort},0#`,
+      smsCommand: this.remoteHost === 'bore.pub' ? `SERVER,1,159.223.110.159,${this.remotePort},0#` : `SERVER,1,${this.remoteHost},${this.remotePort},0#`,
+      smsCommandDomain: `SERVER,0,${this.remoteHost},${this.remotePort},0#`,
       lastConnectedAt: this.lastConnectedAt
     };
   }
