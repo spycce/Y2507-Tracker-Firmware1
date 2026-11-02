@@ -89,24 +89,31 @@ Send the following SMS messages to the SIM card's phone number from your smartph
    ```text
    APN,<your_cellular_apn>#
    ```
-   *(e.g., `APN,internet#` or `APN,airtelgprs.com#`)*
+   *(e.g., `APN,airtelgprs.com#` for Airtel, `APN,www#` for Vi, `APN,bsnlnet#` for BSNL. Note: Jio is 4G/5G only and not supported on 2G hardware).*
 
-2. **Set Server IP & Port (Point to your computer / cloud VPS):**
+2. **Set Public Ingestion Server (Using Persistent Bore Tunnel):**
    ```text
-   SERVER,1,<YOUR_PUBLIC_IP_OR_DOMAIN>,5023,0#
+   SERVER,1,bore.pub,5023,0#
    ```
-   *(e.g., `SERVER,1,198.51.100.25,5023,0#`)*
+   *(Routes TCP traffic through the persistent `bore.pub:5023` tunnel directly to your local server on port 5023).*
 
 3. **Set Real-Time Reporting Interval:**
    ```text
    TIMER,10#
    ```
-   *(Commands the tracker to transmit GPS fixes every 10 seconds while moving).*
+   *(Commands the tracker to transmit GPS fixes every 10 seconds).*
 
-### Step 3: Power the Board
+4. **Verify Tracker Status via SMS:**
+   - Send `STATUS#` -> Check battery %, GSM signal, and GPS fix state.
+   - Send `PARAM#` -> Check configured Server IP/Port and APN.
+   - Send `WHERE#` -> Request immediate coordinate fix.
+
+### Step 3: Power the Board & Ignition Line
 * Connect 12V DC power to the **Red (`90V`)** and **Black (`GND`)** harness wires.
-* Slide the on-board battery switch to **ON**.
-* The tracker will register on the GSM network, open a TCP socket to your server on port `5023`, exchange the GT06 Login handshake, and start streaming live GPS coordinates directly to your dashboard!
+* **IMPORTANT:** Connect the **Orange (`ACC`)** wire to the **Red (`+12V`)** wire. If `ACC` is disconnected (0V), GT06 firmware enters vehicle parked/deep-sleep mode, shuts down the GPS receiver, and drops the TCP connection!
+* Slide the on-board battery switch (`SW1`) to **ON**.
+* Run `tunnel.bat` (Option 1) to open the internet tunnel, and run `run.bat` to launch the platform.
+* The tracker will register on the GSM network, open a TCP socket to `bore.pub:5023`, exchange the GT06 Login handshake, and stream live GPS coordinates directly to your dashboard!
 
 ---
 

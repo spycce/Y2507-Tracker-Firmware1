@@ -58,7 +58,8 @@ class TelemetryWebServer {
             latestLocations: initialLocations,
             alarms,
             stats: this.tcpServer?.stats || {},
-            trackerStatus: this.tcpServer?.getTrackerStatus() || { connected: false }
+            trackerStatus: this.tcpServer?.getTrackerStatus() || { connected: false },
+            tunnelStatus: this.tunnelManager?.getStatus() || null
           }
         }));
 
@@ -137,7 +138,8 @@ class TelemetryWebServer {
     if (pathname === '/api/heartbeat' || pathname === '/api/tracker/status') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       const status = this.tcpServer?.getTrackerStatus() || { connected: false, error: 'TCP server not linked' };
-      res.end(JSON.stringify(status));
+      const tunnel = this.tunnelManager?.getStatus() || null;
+      res.end(JSON.stringify({ ...status, tunnel }));
       return;
     }
 

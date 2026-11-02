@@ -120,13 +120,17 @@ function buildCommand(commandStr, serialNumber = 1) {
 
 // Helper to parse standard 18-byte GT06 GPS telemetry block
 function parseGpsBlock(buf, offset) {
-  const year = 2000 + buf[offset++];
+  const rawYear = buf[offset++];
+  const year = 2000 + rawYear;
   const month = buf[offset++] - 1;
   const day = buf[offset++];
   const hour = buf[offset++];
   const minute = buf[offset++];
   const second = buf[offset++];
-  const dateUtc = Date.UTC(year, month, day, hour, minute, second);
+
+  const currentYear = new Date().getUTCFullYear();
+  const isTimeSynced = (year >= 2024 && year <= currentYear + 1 && month >= 0 && month <= 11 && day >= 1 && day <= 31);
+  const dateUtc = isTimeSynced ? Date.UTC(year, month, day, hour, minute, second) : Date.now();
 
   const satByte = buf[offset++];
   const satellites = satByte & 0x0F;
@@ -158,7 +162,8 @@ function parseGpsBlock(buf, offset) {
   latitude = Math.max(-90, Math.min(90, latitude));
   longitude = Math.max(-180, Math.min(180, longitude));
 
-  const isHistorical = (year === 2022) || (latitude > 19.5 && longitude > 78.5);
+  // Only consider genuinely historical if time was valid AND recorded > 10 mins ago in flash
+  const isHistorical = isTimeSynced && ((Date.now() - dateUtc) > 600000);
 
   return {
     location: {
@@ -239,8 +244,14 @@ function parsePacket(buf) {
     }
 
     // 0x13: Status / Heartbeat Packet
-    case 0x13: {
+    // 0x23: Status / Heartbeat Packet with LBS Information
+    case 0x13:
+    case 0x23: {
       result.type = 'HEARTBEAT';
+      if (protocol === 0x23 && buf.length >= offset + 8 + 3) {
+        // Skip 8 bytes of LBS data: MCC(2), MNC(1), LAC(2), CellID(3)
+        offset += 8;
+      }
       const statusInfo = buf[offset++];
       const voltageLevel = buf[offset++];
       const gsmSignal = buf[offset++];
@@ -263,7 +274,21 @@ function parsePacket(buf) {
         gsmSignal // CSQ: 0 to 31
       };
 
-      result.ack = buildAck(0x13, serialNumber);
+      result.ack = buildAck(protocol, serialNumber);
+      break;
+    }
+
+    // 0x28: LBS Position / Cell Tower Status Packet
+    case 0x28: {
+      result.type = 'LBS';
+      result.ack = buildAck(0x28, serialNumber);
+      break;
+    }
+
+    // 0x94: Information Transmission / Peripheral Packet
+    case 0x94: {
+      result.type = 'PERIPHERAL';
+      result.ack = buildAck(0x94, serialNumber);
       break;
     }
 

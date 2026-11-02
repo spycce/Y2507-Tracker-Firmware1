@@ -1029,11 +1029,13 @@
     state.trackerConnected = !!status.connected;
     state.trackerStatus = status;
 
-    if (status.connected) {
+    if (status.connected || status.isAlive) {
       if (el.serverStatusBadge) el.serverStatusBadge.className = 'status-indicator online';
       if (el.trackerStatusDot) el.trackerStatusDot.className = 'status-dot online';
       if (el.trackerStatusTitle) el.trackerStatusTitle.textContent = 'TRACKER :5023';
-      if (el.connectionState) el.connectionState.textContent = 'CONNECTED';
+      if (el.connectionState) {
+        el.connectionState.textContent = status.socketConnected === false ? 'STANDBY (ACTIVE)' : 'CONNECTED';
+      }
       if (el.trackerLastSeenSub) {
         el.trackerLastSeenSub.textContent = status.lastSeenAgo ? `Active (${status.lastSeenAgo})` : 'Active';
       }
@@ -1041,7 +1043,7 @@
       // Update Diagnostics Modal
       if (el.hbModalDot) el.hbModalDot.className = 'hb-indicator-dot online';
       if (el.hbModalState) {
-        el.hbModalState.textContent = 'CONNECTED & COMMUNICATING';
+        el.hbModalState.textContent = status.socketConnected === false ? 'STANDBY (RECENTLY ACTIVE)' : 'CONNECTED & COMMUNICATING';
         el.hbModalState.style.color = 'var(--emerald-400)';
       }
     } else {

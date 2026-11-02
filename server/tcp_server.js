@@ -64,6 +64,11 @@ class TcpIngestionServer {
       lastHeartbeat: null,
       lastLocation: null
     };
+
+    // Configure socket for cellular network persistence (prevent 60s carrier NAT timeouts)
+    socket.setKeepAlive(true, 15000);
+    socket.setNoDelay(true);
+
     this.clients.set(socket, clientState);
     this.stats.activeConnections = this.clients.size;
 
@@ -86,7 +91,10 @@ class TcpIngestionServer {
         console.log(`[TCP UNPROCESSED BUFFER ON CLOSE]:`, clientState.rxBuffer.toString('hex').toUpperCase());
       }
       if (clientState.imei) {
-        db.statements?.updateDeviceStatus?.run('offline', Date.now(), clientState.imei);
+        const age = Date.now() - (clientState.lastPacketAt || 0);
+        if (age > 180000) {
+          db.statements?.updateDeviceStatus?.run('offline', Date.now(), clientState.imei);
+        }
       }
       this.clients.delete(socket);
       this.stats.activeConnections = this.clients.size;
@@ -189,6 +197,7 @@ class TcpIngestionServer {
         // --- Handle Historical Flash Buffer Dumps ---
         if (loc.isHistorical) {
           console.log(`[TCP Ingestion] HISTORICAL FLASH BUFFER [${imei}]: Lat ${loc.latitude}, Lng ${loc.longitude}, Time ${new Date(loc.timestamp).toISOString()}`);
+          db.recordLocation(loc);
           this.emitEvent('CACHED_HISTORY_SYNC', {
             imei,
             dateString: new Date(loc.timestamp).toISOString()
@@ -197,18 +206,15 @@ class TcpIngestionServer {
           break;
         }
 
-        // --- High-Precision Building Anchor & Static Drift Suppression ---
-        // Adiamville Society Wing (18.624220, 73.727630)
-        // Corrects 50-130m indoor satellite multipath drift when stationary at desk/building
-        const dLat = (loc.latitude - 18.624220) * 111320;
-        const dLng = (loc.longitude - 73.727630) * 111320 * 0.9476;
-        const distFromBuilding = Math.sqrt(dLat * dLat + dLng * dLng);
-
-        if (distFromBuilding <= 180 && (loc.speed < 4 || loc.isGpsPositioned === false)) {
+        // --- Stationary GPS Drift Suppression & Indoor Fallback ---
+        // If GPS has valid satellite lock, ALWAYS preserve genuine outdoor coordinates!
+        // Only fall back to building anchor if GPS has NO satellite fix (indoor cold start)
+        if (loc.isGpsPositioned === false) {
           loc.latitude = 18.624220;
           loc.longitude = 73.727630;
           loc.speed = 0;
-        } else if (loc.speed < 3 || loc.isGpsPositioned === false) {
+        } else if (loc.speed < 2.5) {
+          // Clamp stationary speed jitter
           loc.speed = 0;
         }
 
@@ -275,15 +281,11 @@ class TcpIngestionServer {
           if (parsed.location && parsed.location.latitude && parsed.location.longitude) {
             const loc = { ...parsed.location, imei: clientState.imei };
             loc.timestamp = Date.now();
-            const dLat = (loc.latitude - 18.624220) * 111320;
-            const dLng = (loc.longitude - 73.727630) * 111320 * 0.9476;
-            const distFromBuilding = Math.sqrt(dLat * dLat + dLng * dLng);
-
-            if (distFromBuilding <= 180 && (loc.speed < 4 || loc.isGpsPositioned === false)) {
+            if (loc.isGpsPositioned === false) {
               loc.latitude = 18.624220;
               loc.longitude = 73.727630;
               loc.speed = 0;
-            } else if (loc.speed < 3 || loc.isGpsPositioned === false) {
+            } else if (loc.speed < 2.5) {
               loc.speed = 0;
             }
             db.recordLocation(loc);
@@ -401,9 +403,11 @@ class TcpIngestionServer {
     }
 
     const lastSeen = deviceRecord?.last_seen || latestLocation?.timestamp || null;
+    const isRecentlyActive = lastSeen ? (Date.now() - lastSeen < 180000) : false;
     return {
-      connected: false,
-      isAlive: false,
+      connected: isRecentlyActive,
+      isAlive: isRecentlyActive,
+      socketConnected: false,
       imei: targetImei,
       remoteAddress: null,
       connectedAt: null,
