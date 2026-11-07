@@ -145,7 +145,7 @@ class TelemetryWebServer {
 
     // Real-Time Current Location Refresh Endpoint
     if (pathname === '/api/tracker/refresh-location' || (pathname.startsWith('/api/device/') && pathname.endsWith('/refresh'))) {
-      let targetImei = '860465040325932';
+      let targetImei = null;
       if (pathname.startsWith('/api/device/')) {
         targetImei = pathname.split('/')[3];
       }

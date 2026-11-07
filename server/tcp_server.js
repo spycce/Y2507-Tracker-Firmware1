@@ -349,15 +349,30 @@ class TcpIngestionServer {
   }
 
   // Authoritative Heartbeat & Connection Inspection
-  getTrackerStatus(targetImei = '860465040325932') {
+  getTrackerStatus(targetImei = null) {
     let activeClient = null;
 
-    // Only match sockets that have authenticated with this specific IMEI
-    for (const [socket, state] of this.clients.entries()) {
-      if (state.imei === targetImei) {
-        activeClient = state;
-        break;
+    if (targetImei) {
+      for (const [socket, state] of this.clients.entries()) {
+        if (state.imei === targetImei) {
+          activeClient = state;
+          break;
+        }
       }
+    } else {
+      // Pick first active connected socket
+      for (const [socket, state] of this.clients.entries()) {
+        if (state.imei) {
+          activeClient = state;
+          targetImei = state.imei;
+          break;
+        }
+      }
+    }
+
+    if (!targetImei) {
+      const allDevs = db.getAllDevices();
+      targetImei = allDevs.length > 0 ? allDevs[0].imei : '869925075653319';
     }
 
     const latestLocation = db.getLatestLocation(targetImei) || null;
@@ -428,13 +443,14 @@ class TcpIngestionServer {
     };
   }
 
-  broadcastTrackerStatus(targetImei = '860465040325932') {
+  broadcastTrackerStatus(targetImei = null) {
     const status = this.getTrackerStatus(targetImei);
     this.emitEvent('TRACKER_STATUS', status);
   }
 
-  requestLocationRefresh(imei = '860465040325932') {
+  requestLocationRefresh(imei = null) {
     const status = this.getTrackerStatus(imei);
+    imei = status.imei;
     let commandSent = null;
 
     if (status.connected) {

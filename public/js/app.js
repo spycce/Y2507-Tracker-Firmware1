@@ -3,8 +3,8 @@
 (function () {
   'use strict';
 
-  // Dedicated Hardware Tracker (Single-device platform)
-  const HARDCODED_IMEI = '860465040325932';
+  // Dedicated Hardware Tracker (EV26R / Y2507 active device)
+  const HARDCODED_IMEI = '869925075653319';
 
   // State Management
   const state = {
@@ -142,6 +142,9 @@
     hbModalBatt: document.getElementById('hbModalBatt'),
     hbModalAcc: document.getElementById('hbModalAcc'),
     hbModalPackets: document.getElementById('hbModalPackets'),
+    hbModalGateway: document.getElementById('hbModalGateway'),
+    hbSmsCommand: document.getElementById('hbSmsCommand'),
+    hbSmsDirectNote: document.getElementById('hbSmsDirectNote'),
     hbCheckNowBtn: document.getElementById('hbCheckNowBtn'),
 
     // Toast Container
@@ -347,11 +350,19 @@
   function handleServerMessage(msg) {
     switch (msg.type) {
       case 'SYNC_INIT': {
-        const { devices, latestLocations, trackerStatus } = msg.data;
+        const { devices, latestLocations, trackerStatus, tunnelStatus } = msg.data;
         updateDeviceList(devices);
 
         if (trackerStatus) {
           updateTrackerConnectionHud(trackerStatus);
+        }
+
+        if (tunnelStatus) {
+          if (el.hbModalGateway) el.hbModalGateway.textContent = tunnelStatus.publicEndpoint || 'bore.pub:5023';
+          if (el.hbSmsCommand && tunnelStatus.smsCommand) el.hbSmsCommand.textContent = tunnelStatus.smsCommand;
+          if (el.hbSmsDirectNote && tunnelStatus.smsCommand) {
+            el.hbSmsDirectNote.innerHTML = `<code style="color: #38bdf8;">${tunnelStatus.smsCommand}</code>`;
+          }
         }
 
         if (devices.length > 0) {
@@ -372,6 +383,17 @@
 
       case 'TRACKER_STATUS': {
         updateTrackerConnectionHud(msg.data);
+        break;
+      }
+
+      case 'TUNNEL_UPDATE': {
+        if (msg.data) {
+          if (el.hbModalGateway) el.hbModalGateway.textContent = msg.data.publicEndpoint || 'bore.pub:5023';
+          if (el.hbSmsCommand && msg.data.smsCommand) el.hbSmsCommand.textContent = msg.data.smsCommand;
+          if (el.hbSmsDirectNote && msg.data.smsCommand) {
+            el.hbSmsDirectNote.innerHTML = `<code style="color: #38bdf8;">${msg.data.smsCommand}</code>`;
+          }
+        }
         break;
       }
 
@@ -1086,6 +1108,14 @@
       if (el.hbModalBatt) el.hbModalBatt.textContent = `${status.heartbeat.batteryPercent || '--'}% (${status.heartbeat.voltage ? status.heartbeat.voltage + 'V' : '--'})`;
       if (el.hbModalAcc) el.hbModalAcc.textContent = status.heartbeat.acc ? 'RUNNING (ON)' : 'OFF';
       updateDeviceStatusHud(status.heartbeat);
+    }
+
+    if (status.tunnel) {
+      if (el.hbModalGateway) el.hbModalGateway.textContent = status.tunnel.publicEndpoint || 'bore.pub:5023';
+      if (el.hbSmsCommand && status.tunnel.smsCommand) el.hbSmsCommand.textContent = status.tunnel.smsCommand;
+      if (el.hbSmsDirectNote && status.tunnel.smsCommand) {
+        el.hbSmsDirectNote.innerHTML = `<code style="color: #38bdf8;">${status.tunnel.smsCommand}</code>`;
+      }
     }
   }
 
